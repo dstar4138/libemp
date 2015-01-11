@@ -9,7 +9,7 @@ evaluation.
 
 ## Functionality ##
 
-There are two key features libemp provide:
+There are two key features libemp provides:
 
 ### Dynamic Event Subscriptions ###
 

@@ -1,6 +1,12 @@
 %%% Asserting and validation of running code.
 -ifdef(DEBUG).
 -define(ASSERT(TEST),case TEST of true -> pass; _ -> error(badassert) end).
--else().
+-define(NOT_IMPLEMENTED( Ret ),
+        error_logger:warning_report(io_lib:format("Not Implemented: ~p",[erlang:get_stacktrace()])),
+        Ret
+       ).
+-else.
 -define(ASSERT( _ ), pass).
--endif().
+-define(NOT_IMPLEMENTED( _ ),
+            error(io_lib:format("Not Implemented: ~p",[erlang:get_stacktrace()]))).
+-endif.

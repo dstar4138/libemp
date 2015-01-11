@@ -1,15 +1,24 @@
 -module(libemp).
 -behaviour(application).
 
--include("logging.hrl").
--include("types.hrl").
+-include("internal.hrl").
 
 %% Exported Type Signatures masked by opaques.
 -opaque event() :: libemp_event().
 -export_type([ event/0 ]).
 
+%% Broker Service control
 -export([start/0, stop/0]).
 -export([start/2, prep_stop/1, stop/1]).
+
+%% Plugin control
+-export([install_plugin/1, uninstall_plugin/1, 
+         pause_plugin/1, unpause_plugin/1,
+         list_plugin/0, describe_plugin/1]).
+
+%% Event control
+-export([subscribe/5, publish/2]).
+
 
 %% @doc Start the EMP application.
 start() -> 
@@ -25,16 +34,44 @@ stop() ->
 
 %% @doc Install a plug-in by providing some configuration details, like the
 %%   module name, and how EMP should handle the plugin (distributed?, 
-%%   restartable?, stateless?, etc...)
+%%   restartable?, stateless?, etc...). This is potentially an expensive 
+%%   action (to distribute the plugin across the cluster) but should not 
+%%   cause recompilation of the broker.
 %% @end
--spec install_plugin( [term()] ) -> ok | {error, any()}.
-install_plugin( Config ) -> ok.
+-spec install_plugin( [term()] ) -> possible_error( any() ).
+install_plugin( Config ) -> ?NOT_IMPLEMENTED( ok ).
 
-uninstall_plugin( Name ) -> ok.
-pause_plugin( Name ) -> ok.
-unpause_plugin( Name ) -> ok.
-plugin_list() -> [].
+%% @doc Uninstall a plug-in by unlinking the code and removing it from the
+%%   cluster. Will cause a recompilation if subscriptions were installed for
+%%   the plugin uninstalling. Note this removes ALL SAVED DATA FOR THE PLUGIN.
+%% @end
+-spec uninstall_plugin( plugin_ref() ) -> possible_error( any() ). 
+uninstall_plugin( Name ) -> ?NOT_IMPLEMENTED( ok ).
 
+%% @doc Temporary removal of all subscriptions via a recompile and suppression.
+%%   All subscriptions are intact but are remove from the broker. Good for 
+%%   testing broker changes due to an additional plugin.
+%% @end
+-spec pause_plugin( plugin_ref() ) -> possible_error( any() ).
+pause_plugin( Name ) -> ?NOT_IMPLEMENTED( ok ).
+
+%% @doc Remove the temporary suppression and recompile the broker if 
+%%   neccessary. Will reactivate the plugin across the cluster.
+%% @end
+-spec unpause_plugin( plugin_ref() ) -> possible_error( any() ).
+unpause_plugin( Name ) -> ?NOT_IMPLEMENTED( ok ).
+
+%% @doc List all plugins currently installed. This will also include paused
+%%   plugins as they have already gone through the installation process.
+%% @end
+-spec list_plugin() -> success_error( [ PluginDesc ], any() ) 
+                            when PluginDesc :: {plugin_name(), plugin_module()}.
+list_plugin() -> ?NOT_IMPLEMENTED( [] ).
+
+%% @doc Get the current configuration for the provided plugin reference.
+-spec describe_plugin( plugin_ref() ) -> success_error( Description, any() )
+                            when Description :: [{ atom(), term() }].
+describe_plugin( Name ) -> ?NOT_IMPLEMENTED( [] ).
 
 %% @doc Subscribe a receiving plug-in to a particular event as long as the
 %%   event's attributes match a particular set of predicates (content-based 
@@ -64,17 +101,17 @@ plugin_list() -> [].
 %%          nas_backup plugin. Note the usage of the ATTR definition for 
 %%          accessing the event attributes for addition to the 
 %% @end      
--spec subscribe( libemp_event_name(),
-                 [ predicate_map() ], 
-                 atom(), 
-                 atom(), 
-                 fun( (libemp:event()) -> [term()] ) 
-               ) -> ok | {error, any()}.
+-spec subscribe( libemp_event_name(), 
+                 predicate_mapping(), 
+                 plugin_ref(), plugin_action(), Callback
+               ) -> possible_error( any() )
+               when Callback :: fun( (libemp:event()) -> Args ),
+                    Args :: [ term() ].
 subscribe( EventName, 
            Mapping,
            ReceiverPlugin, 
            ReceiverAction,
-           ReceiverParameters ) -> ok.
+           ReceiverParameters ) -> ?NOT_IMPLEMENTED( ok ).
 
 %% @doc Publish an event with a set of attributes. It is suggested that the
 %%   publisher have a default set of attributes for each event, so that there 
