@@ -28,5 +28,5 @@ start_link( StartArgs ) ->
 init( _Args ) ->
     {ok, {{one_for_one, 5, 60},
           [ 
-            %TODO: Start the Libemp subsystem.
+            %TODO: Start the LibEMP subsystem.
           ]}}.

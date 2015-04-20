@@ -1,4 +1,4 @@
-%%% Asserting and validation of running code.
+%%% Asserting and validation of running code, only use temporarily. %%%
 -ifdef(DEBUG).
 -define(ASSERT(TEST),case TEST of true -> pass; _ -> error(badassert) end).
 -define(NOT_IMPLEMENTED( Ret ),

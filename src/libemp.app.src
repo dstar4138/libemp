@@ -3,8 +3,8 @@
   {description, "Core Library for the Extensible Monitoring Platform"},
   {vsn,"0.1"},
   {registered, [libemp]},
-  {applications, [kernel, stdlib]},
-  {mod, {libemp,[]}},
+  {applications, []},
+  {mod, {libemp_app,[]}},
   {env, []}
  ]
 }.
