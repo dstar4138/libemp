@@ -13,7 +13,7 @@
 -behaviour(libemp_buffer).
 
 % libemp_buffer Behaviour Callbacks. 
--export([initialize/1]).
+-export([initialize/1,register/2]).
 
 %% By default it's a FIFO queue of "unlimited" size.
 -define(DEFAULT_CONFIGS, {fifo, 0, all}).
@@ -23,6 +23,10 @@
 %% @end
 initialize( Args ) ->
     {ok, Reference, ReadCount} = build_ets_buffer_args_dedicated( Args ),
+    {ok, {Reference,ReadCount}}.
+
+%% @doc Wrap the module calls in LibEMP Buffer API Calls.
+register( _TakerGiver, {Reference,ReadCount} ) ->
     Take = prime_read_dedicated(Reference, ReadCount),
     Give = fun(Event) -> ets_buffer:write_dedicated(Reference,Event) end,
     Size = fun() -> ets_buffer:num_entries_dedicated(Reference) end, 

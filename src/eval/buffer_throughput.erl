@@ -2,6 +2,7 @@
 -module(buffer_throughput).
 -export([run_drop/0,
          run_simple/0,
+         run_multiq/0,
          run_epocxy/0,
          run_batchets/0]).
 
@@ -50,6 +51,11 @@ run_drop() ->
 
 run_simple() ->
     {ok, Args} = file:consult("src/buffers/libemp_simple_buffer.cfg"),
+    {ok, Buff} = libemp_buffer:start( Args ),
+    run_tests( Buff ).
+
+run_multiq() ->
+    {ok, Args} = file:consult("src/buffers/libemp_multiq_buffer.cfg"),
     {ok, Buff} = libemp_buffer:start( Args ),
     run_tests( Buff ).
 

@@ -13,7 +13,7 @@
 
 %% Buffer Callback Initialization 
 -behaviour(libemp_buffer).
--export([initialize/1]).
+-export([initialize/1,register/2]).
 
 %% Buffer Implementation
 -behaviour(gen_server).
@@ -25,13 +25,17 @@
 %%   platform.
 %% @end
 initialize( Args ) ->
-    {ok, Pid} = gen_server:start_link( {local, ?MODULE}, ?MODULE, Args, [] ),
-    {ok, Buf} = libemp_buffer:create( [
+    gen_server:start_link( {local, ?MODULE}, ?MODULE, Args, [] ).
+
+%% @doc Register either a taker or giver with the buffer PID, by just returning
+%%   the gen_server API for it.
+%% @end
+register( _TakerGiver, Pid ) ->
+    libemp_buffer:create( [
                     {take, fun()  -> gen_server:call( Pid, take ) end},
                     {give, fun(E) -> gen_server:cast( Pid, {give,E} ) end},
                     {size, fun()  -> gen_server:call( Pid, size ) end},
-                    {destroy, fun() -> exit(Pid,shutdown) end} ]),
-    {ok, Pid, Buf}.
+                    {destroy, fun() -> exit(Pid,shutdown) end} ]).
 
 
 %% @doc Initialize the simple queue server.

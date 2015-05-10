@@ -5,11 +5,14 @@
 %%%
 -module(libemp_drop_buffer).
 -behaviour(libemp_buffer).
--export([initialize/1]).
+-export([initialize/1,register/2]).
 
-initialize( _ ) ->
+initialize( _ ) -> 
+    {ok, []}.
+
+register( _, _ ) -> 
     libemp_buffer:create([
-        {take, fun() -> [ok] end},
+        {take, fun() -> [] end},
         {give, fun(_)-> ok end},
         {size, fun() -> 0 end},
         {destroy, fun() -> ok end}
