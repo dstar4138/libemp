@@ -17,10 +17,10 @@
 -include("libemp.hrl").
 
 %% Export internal LibEMP Buffer API
--export([start/1,start_link/2]).
+-export([start/1, start_link/2]).
 
 %% Export external LibEMP Buffer API
--export([create/1,
+-export([create/1,register/2,unregister/1,
          take/1,give/2,size/1,destroy/1,
          flush/1
         ]).
@@ -35,28 +35,39 @@
              take           :: fun(() -> [libemp_event()]),
              give           :: fun((libemp_event()) -> ok),
              size           :: fun(() -> non_neg_integer()),
-             destroy        :: fun(() -> ok)
-        }). 
+             unregister     :: fun(() -> ok),
+             ref            :: libemp_buffer_init()
+        }).
+-record(libemp_buffer_initializer, {
+            module          :: atom(),
+            init_ref        :: any()
+        }).
 -type libemp_buffer() :: #libemp_buffer{}.
--export_type([libemp_buffer/0]).
+-type libemp_buffer_init() :: #libemp_buffer_initializer{}.
+-export_type([libemp_buffer/0,libemp_buffer_init/0]).
 
 %%% =========================================================================
 %%% LibEMP Buffer Behaviour Callbacks
 %%% =========================================================================
 
 %% Start up the buffer process tree. The result of this function is passed in
-%% on buffer registrtion. If the buffer implementation does not require a 
-%% subprocess tree, this function can just return the arguments for successful
-%% registration.
+%% on buffer registration. If the buffer implementation does not require a 
+%% subprocess tree (and thus nothing to supervise), this function can just 
+%% return the arguments for successful registration.
 -callback initialize( Args :: [ term() ] ) -> {ok, Ref :: term()} |
-                                              {error, Reason :: term()}.
+                                              {ok, pid(), Ref :: term()} |
+                                              {stop, Reason :: term()}.
 
-%% Register with a particular end of the buffer. The resulting buffer object
+%% Register with the buffer with a particular direction. The resulting object
 %% provides the callbacks the requester requires. The behaviour implementer must
 %% construct the buffer object via the libemp_buffer:create/1 function. 
 -callback register( Method :: take | give, Ref :: term() ) -> 
                                       {ok, libemp_buffer()} |
-                                      {stop, Reason :: term()}.
+                                      {error, Reason :: term()}.
+
+%% Breakdown the buffer process tree safely. This is synonomous with `gen_*' 
+%% terminare callback. 
+-callback destroy( Ref ::term() ) -> ok.
 
 %%% ------------------------------
 %%% Behaviour Object Initialization
@@ -66,20 +77,20 @@
 -spec create( [Callback] ) -> {ok, libemp_buffer()} | {error, Reason}
              when Callback :: {FunName, fun()},
                   Reason   :: {missing, FunName} | term(),
-                  FunName  :: take | give | size | destroy.
+                  FunName  :: take | give | size | unregister.
 create( Callbacks ) ->
     case {
         get_callback( take, 0, Callbacks ),
         get_callback( give, 1, Callbacks ),
         get_callback( size, 0, Callbacks ),
-        get_callback( destroy, 0, Callbacks )
+        get_callback( unregister, 0, Callbacks )
     } of
         {false,_,_,_} -> {error, {missing, take}};
         {_,false,_,_} -> {error, {missing, give}};
         {_,_,false,_} -> {error, {missing, size}};
-        {_,_,_,false} -> {error, {missing, destory}};
-        {T,G,S,D} -> 
-            {ok, #libemp_buffer{take=T,give=G,size=S,destroy=D}}
+        {_,_,_,false} -> {error, {missing, unregister}};
+        {T,G,S,U} -> 
+            {ok, #libemp_buffer{take=T,give=G,size=S,unregister=U}}
     end.
 
 %% @private
@@ -87,39 +98,62 @@ create( Callbacks ) ->
 %%   module and save the result using the system configuration.
 %% @end
 -spec start_link( BufferArgs :: [term()], SystemArgs :: [term()] ) ->
-                            {ok, pid()} | ignore | {error, Reason :: term()}.
+                                    {ok, pid(), libemp_buffer_init()} | 
+                                    ignore | 
+                                    {error, Reason :: term()}.
 start_link( BufferInstanceArgs, SystemArgs ) ->
     Args = libemp_util:merge_default_args( BufferInstanceArgs, SystemArgs ),
-    {buffer_module, Module} = proplists:lookup(buffer_module, Args),
-    case
-        catch wrap_extern( Module, initialize, [Args] ) 
-    of
-        {ok, BufferObj} when is_record(BufferObj, ?MODULE) ->
-            save_buffer( BufferObj, SystemArgs ),
+    case libemp_buffer:start( Args ) of
+        {ok, Initializer} ->
+            save_buffer( Initializer, SystemArgs ),
             ignore;
-        {ok, Pid, BufferObj} when is_record(BufferObj, ?MODULE) andalso
-                                  is_pid(Pid) ->
-            save_buffer( BufferObj, SystemArgs ),
-            link_pid(Pid);
-        {stop, Reason} -> 
-            {error, Reason}
+        {ok, Pid, Initializer} = Res ->
+            save_buffer( Initializer, SystemArgs ),
+            verify_link_pid( Pid ),
+            Res;
+        {error, _} = Err -> 
+            Err
     end.
-
+   
+%% @private
+%% @doc Initialize the buffer; returns a factory initializer for this buffer
+%%   type.
+%% @end 
+-spec start( Args :: [term()] ) -> 
+                            {ok, pid(), libemp_buffer_init()} |
+                            {ok, libemp_buffer_init()} | 
+                            {error, term()}.
 start( BufferInstanceArgs ) ->
     {buffer_module, Mod} = proplists:lookup(buffer_module, BufferInstanceArgs),
     case
         catch wrap_extern( Mod, initialize, [BufferInstanceArgs] ) 
     of
-        {ok, BufferObj} when is_record(BufferObj, ?MODULE) ->
-            {ok, BufferObj};
-        {ok, _, BufferObj} when is_record(BufferObj, ?MODULE) ->
-            {ok, BufferObj};
+        {ok, Ref} ->
+            {ok, #libemp_buffer_initializer{module=Mod, init_ref=Ref}};
+        {ok, Pid, Ref} ->
+            {ok, Pid, #libemp_buffer_initializer{module=Mod, init_ref=Ref}};
         {stop, Reason} -> 
+            {error, Reason};
+        {'EXIT', Reason} ->
             {error, Reason}
     end.
 
-register( AsTakeOrGive, BufferInitializer ) ->
-
+%% @private
+%% @doc Ask the buffer initializer to generate a new buffer instance. 
+-spec register( take | give, libemp_buffer_init() ) ->
+            {ok, libemp_buffer()} | {error, Reason :: term()}.
+register( AsTakeOrGive, 
+          #libemp_buffer_initializer{ module=Mod, init_ref=Ref}=Init ) -> 
+    case 
+        catch wrap_extern( Mod, register, [AsTakeOrGive, Ref] )
+    of
+        {ok, Buffer} -> 
+            {ok, Buffer#libemp_buffer{ref=Init}};
+        {'EXIT', Reason} ->
+            {error, Reason};
+        {error, _} = Err -> 
+            Err
+    end.
 
 %%% ------------------------------
 %%% Behaviour Object Call-throughs
@@ -137,12 +171,23 @@ size( #libemp_buffer{size=Size} ) -> wrap_extern(Size,[]).
 -spec give( libemp_event(), libemp_buffer() ) -> ok.
 give( Event, #libemp_buffer{give=Give} ) -> wrap_extern(Give,[Event]).
 
-%% @doc Destroy the buffer. Note, the buffer object will no longer be valid.
--spec destroy( libemp_buffer() ) -> ok.
-desbuffer implementation to load.
-*troy( #libemp_buffer{destroy=Destroy} = Buffer ) -> 
-    wrap_extern(Destroy,[]),
-    remove_buffer(Buffer).
+%% @doc Unregister the current buffer object. Note, the buffer object will no
+%%   longer be valid its usage after has undefined behaviour.
+%% @end
+-spec unregister( libemp_buffer() ) -> ok.
+unregister( #libemp_buffer{unregister=Unregister} ) -> 
+    wrap_extern(Unregister,[]).
+
+%% @doc Destroy the buffer. Note, the buffer object will no longer be valid for 
+%%   all processes and usage from any object after destruction has undefined
+%%   behaviour.
+%% @end 
+-spec destroy( libemp_buffer() | libemp_buffer_init() ) -> ok.
+destroy( #libemp_buffer{ref=BufferInit} ) -> 
+    destroy( BufferInit );
+destroy( #libemp_buffer_initializer{ module=Mod, init_ref=Ref }=Init ) -> 
+    wrap_extern(Mod, destroy, [Ref]), % ignore errors.
+    remove_buffer( Init ).
 
 
 %% @doc Drop all events in a buffer until it's size is 0. Only should be used 
@@ -191,7 +236,7 @@ remove_buffer( _BufferObj ) -> ok. %TODO: Destroy the saved libemp buffer obj.
 
 %% @hidden
 %% @doc Link a process identifier, but if there is an error doing so return it. 
-link_pid( Pid ) ->
+verify_link_pid( Pid ) ->
     case catch link( Pid ) of
         true -> {ok, Pid};
         {'EXIT',{noproc,_}} -> {error, noproc}

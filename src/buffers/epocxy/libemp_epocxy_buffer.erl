@@ -3,7 +3,7 @@
 %%%     An Event Buffer using the Epocxy library's ets_buffer module. We can 
 %%%     test multiple buffer models such as fifo/lifo/ring and with different
 %%%     batched reading mechanisms (all, N>1, etc). Additionally this serves as
-%%%     a decent example as to how to wrap a generic buffer implementation as 
+%%%     a decent example as to how to wrap a generic queue implementation as 
 %%%     a LibEMP Buffer. 
 %%%
 %%%     Note: It looks like the read mechanism does not guarantee uniqueness,
@@ -13,7 +13,7 @@
 -behaviour(libemp_buffer).
 
 % libemp_buffer Behaviour Callbacks. 
--export([initialize/1,register/2]).
+-export([initialize/1,register/2,destroy/1]).
 
 %% By default it's a FIFO queue of "unlimited" size.
 -define(DEFAULT_CONFIGS, {fifo, 0, all}).
@@ -30,13 +30,17 @@ register( _TakerGiver, {Reference,ReadCount} ) ->
     Take = prime_read_dedicated(Reference, ReadCount),
     Give = fun(Event) -> ets_buffer:write_dedicated(Reference,Event) end,
     Size = fun() -> ets_buffer:num_entries_dedicated(Reference) end, 
-    Destroy = fun() -> ets_buffer:delete_dedicated(Reference) end,
+    Unregister = fun() -> ok end,
     libemp_buffer:create([
             {take, Take},
             {give, Give},
             {size, Size},
-            {destroy, Destroy}
+            {unregister, Unregister}
     ]).
+
+%% @doc Destroy the whole ets buffer.
+destroy( {Reference, _} ) ->
+    ets_buffer:delete_dedicated( Reference ).
 
 %%% =========================================================================
 %%% Private Functionality

@@ -13,7 +13,7 @@
 
 %% Buffer Callback Initialization 
 -behaviour(libemp_buffer).
--export([initialize/1,register/2]).
+-export([initialize/1,register/2,destroy/1]).
 
 %% Buffer Implementation
 -behaviour(gen_server).
@@ -25,21 +25,34 @@
 %%   platform.
 %% @end
 initialize( Args ) ->
-    gen_server:start_link( {local, ?MODULE}, ?MODULE, Args, [] ).
+    {ok, Pid} = gen_server:start_link( {local, ?MODULE}, ?MODULE, Args, [] ),
+    {ok, Pid, ?MODULE}.
 
 %% @doc Register either a taker or giver with the buffer PID, by just returning
 %%   the gen_server API for it.
 %% @end
-register( _TakerGiver, Pid ) ->
+register( _TakerGiver, Ref ) ->
     libemp_buffer:create( [
-                    {take, fun()  -> gen_server:call( Pid, take ) end},
-                    {give, fun(E) -> gen_server:cast( Pid, {give,E} ) end},
-                    {size, fun()  -> gen_server:call( Pid, size ) end},
-                    {destroy, fun() -> exit(Pid,shutdown) end} ]).
+                    {take, fun()  -> gen_server:call( Ref, take ) end},
+                    {give, fun(E) -> gen_server:cast( Ref, {give,E} ) end},
+                    {size, fun()  -> gen_server:call( Ref, size ) end},
+                    {unregister, fun() -> ok end} % ignore
+    ]).
 
+%% @doc Ask the process tree to shutdown.
+destroy( Ref ) ->
+    case whereis(Ref) of
+        Pid when is_pid(Pid) ->
+            exit( Pid, normal ),
+            hang_for_destroy( Ref ); % TODO: really hang here?
+        _ -> 
+            ok % Consider destroyed.
+    end.
 
 %% @doc Initialize the simple queue server.
-init( Args ) -> init_handler( Args ).
+init( Args ) -> 
+    process_flag(trap_exit, true), 
+    init_handler( Args ).
 
 %% @doc Handle gen_server calls. Currently used only for event removals.
 handle_call( take, _From, State ) -> take_handler( State );
@@ -92,3 +105,8 @@ out(Q,N) ->
     {Top,Rest} = lists:split(N, queue:to_list(Q)),
     {Top, queue:from_list(Rest)}.
 
+hang_for_destroy( Ref ) ->
+    case whereis( Ref ) of
+        Pid when is_pid(Pid) -> hang_for_destroy( Ref );
+        _ -> ok
+    end.

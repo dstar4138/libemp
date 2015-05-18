@@ -9,7 +9,7 @@
 -behaviour(libemp_buffer).
 
 %% Behaviour Exports
--export([initialize/1, register/2]).
+-export([initialize/1, register/2, destroy/1]).
 %% Private Exports
 -export([rand_events/1]).
 
@@ -20,8 +20,11 @@ register( _, State ) ->
         {take, fun() -> libemp_pop_buffer:rand_events(State) end},
         {give, fun(_) -> ok end},
         {size, fun() -> 0 end},
-        {destroy, fun() -> ok end}
+        {unregister, fun() -> ok end}
     ]).
+
+destroy( _ ) ->
+    ok.
 
 %%% ======
 %%% Private Functionality
@@ -29,9 +32,9 @@ register( _, State ) ->
 -record(state, {possible_events, select_size, max}).
 
 init_handler( Args ) ->
-    {EventList,Size} = case proplists:lookup(buffer_event_list, Args ) of
-        {buffer_event_list, []} -> {[event],1};
-        {buffer_event_list, L} when is_list(L) -> {L, length(L)}
+    {EventList,Size} = case proplists:lookup(buffer_known_events, Args ) of
+        {buffer_known_events, []} -> {[event],1};
+        {buffer_known_events, L} when is_list(L) -> {L, length(L)}
     end,
     Max = case proplists:lookup(buffer_take_count, Args) of
         {buffer_take_count, all} -> 1000;

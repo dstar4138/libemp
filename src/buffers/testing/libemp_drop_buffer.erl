@@ -5,7 +5,7 @@
 %%%
 -module(libemp_drop_buffer).
 -behaviour(libemp_buffer).
--export([initialize/1,register/2]).
+-export([initialize/1, register/2, destroy/1]).
 
 initialize( _ ) -> 
     {ok, []}.
@@ -15,5 +15,8 @@ register( _, _ ) ->
         {take, fun() -> [] end},
         {give, fun(_)-> ok end},
         {size, fun() -> 0 end},
-        {destroy, fun() -> ok end}
+        {unregister, fun() -> ok end}
     ]).
+
+destroy( _ ) ->
+    ok.
