@@ -6,7 +6,7 @@ distributed systems for handling event processing, and attempts to both ease
 their creation as well as making these design decisions apparent and easier to
 reason about.
 
-## Background ## 
+## Background ##
 
 EMP stands for Extensible Monitoring Platform, and LibEMP is the core dynamic
 plug-in framework for event generation, routing, and processing. It handles the 
