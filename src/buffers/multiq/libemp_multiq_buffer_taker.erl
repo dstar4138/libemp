@@ -20,7 +20,6 @@ start_link( Args ) ->
 
 %% @doc Initialize the Take Handler.  
 init( _Args ) -> 
-    io:format("taker up."),
     {ok, #taker{}}. %TODO: what args are needed here? 
 
 %% @doc Handle the synchronous API calls: `take', `register' and `size'.

@@ -66,7 +66,7 @@
                                       {error, Reason :: term()}.
 
 %% Breakdown the buffer process tree safely. This is synonomous with `gen_*' 
-%% terminare callback. 
+%% terminate callback. 
 -callback destroy( Ref ::term() ) -> ok.
 
 %%% ------------------------------

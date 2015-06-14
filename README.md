@@ -1,73 +1,93 @@
 # Lib EMP #
 
-EMP stands for Extensible Monitoring Platform, and libemp is the core dynamic
-PubSub engine. It is generic enough to be repurposed for alternative event
-driven applications, but has been specialized for the purpose of EMP. For this
-reason it is not recommended for a system reliant on real-time or static event
-evaluation.
+Building distributed systems is hard, it's worse without knowing all the trade 
+offs you are implicitly making ahead of time. LibEMP targets a set of
+distributed systems for handling event processing, and attempts to both ease
+their creation as well as making these design decisions apparent and easier to
+reason about.
+
+## Background ## 
+
+EMP stands for Extensible Monitoring Platform, and LibEMP is the core dynamic
+plug-in framework for event generation, routing, and processing. It handles the 
+fault-tolerance, scaling, and abstractions involved for building your own event 
+generators, routers, and processors.
+
+EMP builds on top of LibEMP to provide a dynamic subscription language, a clean
+user interfacing mechanism, and a Plug-In repository (for different event 
+sources). Its target is to be a personal cloud (IoTs) monitoring platform that 
+can run across your own machines. This goal aside, LibEMP makes no assumptions 
+about where events come from, how quickly they are generated, their content, or 
+even how they are processed. This lets LibEMP lend itself to potentially a wide 
+range of use cases.
+ 
+## Abstractions ##
+
+In event processing, you typically have two to three components you concern 
+yourself with: the event _sources_, their _processors_, and infrequently the 
+message queues or _buffers_ that connect the two. Trade offs between these three
+connected pieces are hard to make and are not frequently apparent in some 
+systems. Stream processing applications, for example, typically ignore the 
+topic of buffers and concern themselves with the _sources_ and _processors_, 
+to provide yet another abstraction on top of these concepts. Not necessarily a 
+bad idea, but can complicate things when it comes times to scale out or become
+fault-tolerant (as these connections have been abstracted away).
+
+LibEMP talks about all three components, with a few querks and metadata 
+requirements for planning ahead in a distributed and fault-prone world. LibEMP
+extends Erlang Nodes to include information regarding your structure. This is
+so the logic for handling Node/Network/Component faults can all be 
+explicitly communicated.
+
+### Sinks ###
+
+Starting at the end of the equation, LibEMP Event _Sinks_ are used for 
+encapsulating the processing of events. The functionality here is entirely up to
+the developer of the application, that being said, Sinks can be composed onto
+one another to easily extend their usefulness. 
+
+_Research is still being done on how to properly define and implement a Sink
+interface, so if you have experience in the topic or have some suggestions,
+please let us know._
+
+### Buffers ###
+
+The middle of the equation is the most interesting. LibEMP Event _Buffers_ are 
+used for storing events waiting to be processed by the Event Sinks. While this
+seems simple enough, the levels of trade off involved in that statement are
+staggering. 
+
+* Are adding events to the system transactional? 
+* Are the events stored to disk?
+* Do they need to be sent over a network?
+* Do you need to sequence (order) the events being generated? 
+* What are the speed/latency guarantees needed by the system?
+
+Additionally, Buffers are used as the primary mechanism of distribution in a 
+system. By choosing a distributed buffer, there could be a network of Sinks all 
+processing from different Nodes, or simply separation of concerns for 
+computationally intensive event processing.
+
+To learn more about the Buffers currently in development and the trade offs 
+they make, please see the 
+[Bundled Buffers](https://github.com/dstar4138/libemp/tree/master/src/buffers).
+
+### Monitors ###
+
+Finally, Event sources, which LibEMP calls _Monitors_, differ somewhat from the
+common ideas around event stream sources. Monitors encapsulate entire APIs for 
+downstream services. Instead of thinking in terms of "I want to monitor my 
+GitHub events" think of it as a "GitHub Monitor which can be set to monitor 
+your stream". This subtle difference allows for extreme scaling and fault 
+tolerance later on.
+
+It additionally adds a second level of interaction with your event processing
+platform. If a Monitor wraps an entire service API, then it can also interface
+with the external service. This allows LibEMP and its Event Sinks to affect the
+streams in turn (closing the event loop).
+
+_Research is still being done on how to properly define and implement a Monitor
+interface, so if you have experience in the topic of have some suggestions,
+please let us know._
 
 
-## Functionality ##
-
-There are two key features libemp provides:
-
-### Dynamic Event Subscriptions ###
-
-Instead of run-time analysis of each event stream, we instead utilize a
-compile-time restructuring of the subscription unification function. This
-compile-time cost happens on the introduction of any new subscription added via
-the subscription intermediate language or `add_subscription/2` function.
-
-### Plug-and-Play Event Streams ###
-
-Plug-ins can both publish one or more event streams and subscribe to the
-event streams of others. An event stream is a single type of event, who's
-parameters contain actionable data. For example, a Github plugin can have an
-event stream devoted to "merge" events, and another for "pull". These events
-could contain parameters denoting the repository and user which triggered them.
-
-
-## Usage ##
-
-libemp can only be accessed inside of an Erlang VM currently, as such, we must
-initialize Erlang supervision tree for the event processor and then all
-plug-ins. Namely,
-
-    > libemp:start().
-    > Plugins = [ github, moduleA ].
-    > libemp:load( Plugins ).
-
-When a new subscription needs to be added:
-
-    > NewSub = { mergeEvent, 
-                 fun(E) -> event:param(user,E) =:= "dstar4138" end,
-                 commandX,
-                 fun(E) -> [ event:param(user,E),
-                             event:param(message,E)
-                           ]
-                 end
-               }.
-    > moduleA:module_info( attributes ).
-    [{vsn, ...1}]
-    > libemp:add_subscription( moduleA, NewSub ).
-    > moduleA:module_info( attributes ).
-    [{vsn, ...2}]
-
-This could recompile the `moduleA:unify/1` module to look like:
-
-    unify( Event ) -> 
-        case type(Event) of
-        ...
-        mergeEvent -> (case user(Event) of
-                        ...
-                        "dstar4138" -> 
-                            erlang:apply(moduleA,commandX,[user(Event),
-                                                           message(Event)])
-                        ...
-                       end)
-        ...
-        end.
-
-Please see the [empd](https://github.com/Empd/empd) repository for more
-examples and use cases. You may include libemp in your project using 
-[rebar](https://github.com/rebar/rebar).
