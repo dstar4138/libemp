@@ -5,7 +5,30 @@
   {registered, [libemp]},
   {applications, []},
   {mod, {libemp_app,[]}},
-  {env, []}
+  {env, [
+    %% Monitors -   
+    %% The monitor listing is not consumed from here. The following monitors
+    %% are the system required monitors for logging/timing/system-fault events.
+    {monitor_modules, [ 
+        libemp_log_monitor,
+        libemp_time_monitor,
+        libemp_fault_monitor
+    ]},
+    
+    %% Sink -
+    %% By default the application will not start a sink and will require that
+    %% one is attached, but this setting will verify that the sink supervisor
+    %% is at least up and ready to attach a sink. Comment out if you do not
+    %% ever want a sink on this machine.
+    {sink_support, true},
+    %{sink_module, libemp_simple_sink}, % Uncomment for simplistic counting.
+ 
+    %% Buffer -
+    %% Selection and configuration proceeding, please see /src/buffers
+    %% for details regarding potential configuration. By default, select
+    %% the 'simple' buffer as it has an expectable/understood usage pattern.
+    {buffer_module, libemp_simple_buffer}
+  ]}
  ]
 }.
 

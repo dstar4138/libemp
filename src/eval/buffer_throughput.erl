@@ -1,9 +1,12 @@
 %%% Buffer testing
 -module(buffer_throughput).
--export([run_tests/1]).
+-export([run/1,run_tests/1,reductions/1]).
 -export([take/4,give/4]).
 -define(FILLUP_COUNT, 1000000).
 
+%% @doc Run a set of tests over the buffer, namely agressively adding/removing
+%%   events with various numbers of producers/consumers.
+%% @end
 run_tests( QueueName ) ->
     {ok, BufferArgs} = get_configs( QueueName ),
     
@@ -19,18 +22,57 @@ run_tests( QueueName ) ->
 
     timer:sleep(1000),
     io:format("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-~n~n"),
-    io:format("Running parallel fill/pull test...~n"),
+    io:format("Running parallel fill (1) / pull (1) test...~n"),
     {ok, Buffer2} = make_buffer( BufferArgs ),
     time_run(fun parallel_test/2, [Buffer2, 1]),
     libemp_buffer:destroy( Buffer2 ),
 
     timer:sleep(1000),
     io:format("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-~n~n"),
-    io:format("Running parallel fill/pull test...~n"),
+    io:format("Running parallel fill (50) / pull (1) test...~n"),
     {ok, Buffer3} = make_buffer( BufferArgs ),
     time_run(fun parallel_test/2, [Buffer3, 50]),
     libemp_buffer:destroy( Buffer3 ).   
-    %,halt(0).
+
+%% @doc Run the tests and then halt the VM.
+run( QueueName ) ->
+    run_tests( QueueName ),
+    halt( 0 ).
+
+%% @doc Pass in the number of times to run, and get the number of reductions 
+%%   it takes to push an item onto a buffer. My runs suggest roughly 3.
+%% @end
+reductions(Count) ->
+    {ok, BufferArgs} = get_configs("drop"),
+    {ok, InitBuffer} = make_buffer( BufferArgs ),
+    {ok, Buffer} = libemp_buffer:register( give, InitBuffer ),
+    GVals = lists:foldl( fun( _, App ) -> 
+                         Self = self(),
+                         CurCount = element(2,process_info(Self,reductions)),
+                         libemp_buffer:give(0, Buffer),
+                         NxtCount = element(2,process_info(Self,reductions)),
+                         [NxtCount-CurCount|App]
+            end, [], lists:seq(1,Count) ),
+    % Prune first couple itterations to avoid issues with startup.
+    CleanSize = round(max(1,Count-(Count/5))),
+    {GValsClean,_} = lists:split(CleanSize, GVals),
+    io:format("GIVE: Avgs ~p, Max ~p, Min ~p~n~p~n",[lists:sum(GValsClean)/CleanSize,
+                                           lists:max(GValsClean),
+                                           lists:min(GValsClean),
+                                           lists:sort(GValsClean)]),
+    TVals = lists:foldl( fun( _, App ) -> 
+                         Self = self(),
+                         CurCount = element(2,process_info(Self,reductions)),
+                         libemp_buffer:take(Buffer),
+                         NxtCount = element(2,process_info(Self,reductions)),
+                         [NxtCount-CurCount|App]
+            end, [], lists:seq(1,Count) ),
+    {TValsClean,_} = lists:split(CleanSize, TVals),
+    io:format("TAKE: Avgs ~p, Max ~p, Min ~p~n~p~n",[lists:sum(TValsClean)/CleanSize,
+                                           lists:max(TValsClean),
+                                           lists:min(TValsClean),
+                                           lists:sort(TValsClean)]),
+    ok.
 
 %%% ===
 %%% Time a test and print out statistics.
@@ -40,7 +82,7 @@ time_run( TestFun, Args ) ->
     io:format("========================================~n"),
     Test = erlang:apply(TestFun, Args), % Initialize test
     {Time, _} = timer:tc( Test ),
-    io:format(<<"Test finished in: ~tp μs~n~n"/utf8>>,[Time]).
+    io:format("Test finished in: ~tp μs~n~n",[Time]).
 
 %%% ===
 %%% Run a test on the buffer. 

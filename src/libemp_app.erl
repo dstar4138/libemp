@@ -1,3 +1,7 @@
+%%% LibEMP   
+%%% 
+%%%
+
 -module(libemp_app).
 -behaviour(application).
 -include("internal.hrl").

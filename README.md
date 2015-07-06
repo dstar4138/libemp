@@ -35,9 +35,9 @@ fault-tolerant (as these connections have been abstracted away).
 
 LibEMP talks about all three components, with a few querks and metadata 
 requirements for planning ahead in a distributed and fault-prone world. LibEMP
-extends Erlang Nodes to include information regarding your structure. This is
-so the logic for handling Node/Network/Component faults can all be 
-explicitly communicated.
+extends Erlang Nodes to include information regarding your application's 
+structure. This is so the logic for handling Node/Network/Component faults can 
+all be explicitly communicated.
 
 ### Sinks ###
 
@@ -83,8 +83,10 @@ tolerance later on.
 
 It additionally adds a second level of interaction with your event processing
 platform. If a Monitor wraps an entire service API, then it can also interface
-with the external service. This allows LibEMP and its Event Sinks to affect the
-streams in turn (closing the event loop).
+with the external service from LibEMP's side. This allows LibEMP and its Event 
+Sinks to affect the streams in turn (thereby closing the event loop). For 
+example, when a Github 'fork' event happens on a set of particular repositories,
+have the Sink automatically put a 'watch' on it.
 
 _Research is still being done on how to properly define and implement a Monitor
 interface, so if you have experience in the topic of have some suggestions,
