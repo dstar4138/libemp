@@ -33,18 +33,11 @@ init( StartArgs ) ->
                   intensity => 1,
                   period    => 5 
                 },
+    SystemArgs = [],
     {ok, {SupFlags, [
             #{ id    => libemp_buffer, 
-               start => {libemp_buffer_sup, start_link, [StartArgs]},
+               start => {libemp_buffer_sup, start_link, [StartArgs, SystemArgs]},
                type  => worker 
-             },
-            #{ id    => libemp_sinks,
-               start => {libemp_sink_sup, start_link, [StartArgs]},
-               type  => supervisor 
-             },
-            #{ id    => libemp_monitors,
-               start => {libemp_monitor_sup, start_link, [StartArgs]},
-               type  => supervisor 
              }
-    ]}}.
+     ]}}.
 

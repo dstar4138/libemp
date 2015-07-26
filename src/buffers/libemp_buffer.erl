@@ -14,7 +14,7 @@
 %%%
 -module(libemp_buffer).
 -compile(inline).
--include("internal.hrl").
+-include("../internal.hrl").
 
 %% Export internal LibEMP Buffer API
 -export([start/1, start_link/2]).
