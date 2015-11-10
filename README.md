@@ -1,5 +1,7 @@
 # Lib EMP #
 
+[![Build Status](http://ci.slackless.com/api/badge/github.com/dstar4138/libemp/status.svg?branch=master)](http://ci.slackless.com/github.com/dstar4138/libemp)
+
 Building distributed systems is hard, it's worse without knowing all the trade 
 offs you are implicitly making ahead of time. LibEMP targets a set of
 distributed systems for handling event processing, and attempts to both ease
