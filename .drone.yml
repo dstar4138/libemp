@@ -1,0 +1,4 @@
+# https://github.com/msaraiva/alpine-erlang
+image: msaraiva/erlang:18.0
+script:
+  - make libemp
