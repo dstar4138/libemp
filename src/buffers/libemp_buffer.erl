@@ -3,7 +3,7 @@
 %%%     This module defines two things; the Buffer Behaviour and the Buffer
 %%%     Object Wrapper. The Behaviour defined expects only one function which
 %%%     initializes the buffer (be that in memory, or starting up a process),
-%%%     and then returns it. To do so it must build a transferable structure
+%%%     and then returns it. To do so, it must build a transferable structure
 %%%     (a record). All interactions with the buffer go through callbacks 
 %%%     embedded into this structure. This reduces the complexity of buffer
 %%%     implementation and useage, at the cost of portability. 
@@ -12,17 +12,30 @@
 %%%     such as requiring a gen_server as the synchronization point. These
 %%%     decisions are better left to the specific buffer developers.
 %%%
+%%%     Usage:
+%%%         > Example = libemp_simple_buffer.
+%%%         > {ok, Ref, Buffer} = libemp_buffer:start( Example ).
+%%%         > {ok, ProducerRef} = libemp_buffer:register( give, Buffer ).
+%%%         > {ok, ConsumerRef} = libemp_buffer:register( take, Buffer ).
+%%%         > ok = libemp_buffer:give( Event, ProducerRef ).
+%%%         > [ Event ] = libemp_buffer:take( ConsumerRef ).
+%%%         ...
+%%%         > ok = libemp_buffer:destroy( ProducerRef ).
+%%%         > ok = libemp_buffer:destroy( ConsumerRef ).
+%%%         > ok = libemp_buffer:destroy( Buffer ).
+%%%
 -module(libemp_buffer).
 -compile(inline).
 -include("../internal.hrl").
 
 %% Export internal LibEMP Buffer API
--export([start/1, start_link/2]).
+-export([start/1, start/2, start/3,
+         start_link/3, validate_configs/3]).
 
 %% Export external LibEMP Buffer API
 -export([create/1,register/2,unregister/1,
          take/1,give/2,size/1,destroy/1,
-         flush/1
+         flush/1,drop/2
         ]).
 
 %% LibEMP Buffer Object:
@@ -39,8 +52,9 @@
              ref            :: libemp_buffer_init()
         }).
 -record(libemp_buffer_initializer, {
-            module          :: atom(),
-            init_ref        :: any()
+            id              :: term(), % Globally unique ID for referencing.
+            module          :: atom(), % Module which defines behaviour.
+            init_ref        :: any()   % Reference state for the initializer. 
         }).
 -type libemp_buffer() :: #libemp_buffer{}.
 -type libemp_buffer_init() :: #libemp_buffer_initializer{}.
@@ -69,6 +83,14 @@
 %% terminate callback. 
 -callback destroy( Ref ::term() ) -> ok.
 
+%% OPTIONAL:
+-optional_callbacks([ validate_configs/1 ]).
+
+%% Check if the arguments getting passed in are going to be valid. You can
+%% be as strict as you want here. But know LibEMP startup will fail if this
+%% returns an Error.
+-callback validate_configs( [ term() ] ) -> ok | {error, Reason :: term()}.
+
 %%% ------------------------------
 %%% Behaviour Object Initialization
 %%% ------------------------------
@@ -94,44 +116,87 @@ create( Callbacks ) ->
     end.
 
 %% @private
-%% @doc Initialize the buffer implementation by calling into the callback
-%%   module and save the result using the system configuration.
+%% @doc Checks if the given parameters match up with a particular buffer
+%%   which can be loaded and executed. If the buffer module exports config
+%%   validation api, then it will check it via that as well.
 %% @end
--spec start_link( BufferArgs :: [term()], SystemArgs :: [term()] ) ->
-                                    {ok, pid(), libemp_buffer_init()} | 
+-spec validate_configs( atom(), atom(), [term()] ) -> ok | {error, term()}.
+validate_configs( Name, Module, Configs ) ->
+  case {
+    libemp_node:get_buffer(Name),
+    code:which(Module)
+  }
+  of
+    { {ok,_}, _ } ->
+      {error, {buffer_already_exists,Name}};
+    { _, non_existing } ->
+      {error, {non_existing, Module}};
+    _Success ->
+      wrap_extern( Module, validate_configs, [ Configs ], ok )
+  end.
+
+
+%% @private
+%% @doc Initialize the buffer implementation by calling into the callback
+%%   module and save the result using the system configuration. This allows
+%%   Sinks/Monitors to link to it by name rather than by reference (which is
+%%   required if started via start/1,2,3).
+%% @end
+-spec start_link( Name :: atom(), Mod :: atom(), BufferArgs :: [term()] ) ->
+                                    {ok, pid()} |
                                     ignore | 
                                     {error, Reason :: term()}.
-start_link( BufferInstanceArgs, SystemArgs ) ->
-    Args = libemp_util:merge_default_args( BufferInstanceArgs, SystemArgs ),
-    case libemp_buffer:start( Args ) of
-        {ok, Initializer} ->
-            save_buffer( Initializer, SystemArgs ),
+start_link( Name, Mod, Args ) ->
+    case libemp_buffer:start( Name, Mod, Args ) of
+        {ok, false, Initializer} ->
+            save_buffer( Initializer ),
             ignore;
-        {ok, Pid, Initializer} = Res ->
-            save_buffer( Initializer, SystemArgs ),
+        {ok, Pid, Initializer} ->
+            save_buffer( Initializer ),
             verify_link_pid( Pid ),
-            Res;
+            {ok, Pid};
         {error, _} = Err -> 
             Err
     end.
-   
+
+
+%% @private
+%% @doc Initialize the buffer with default arguments; returns a factory
+%%   initializer for this buffer type.
+%% @end
+-spec start( Module ::atom() ) ->
+                            {ok, pid(), libemp_buffer_init()} |
+                            {ok, false, libemp_buffer_init()} |
+                            {error, term()}.
+start( Module ) -> start( Module, Module, [] ).
+
+%% @private
+%% @doc Initialize the buffer with default arguments but with a new name;
+%%   returns a factory initializer for this buffer type. Useful if you have
+%%   multiple buffers with the same Module implementation.
+%% @end
+-spec start( Name :: atom(), Module ::atom() ) ->
+                            {ok, pid(), libemp_buffer_init()} |
+                            {ok, false, libemp_buffer_init()} |
+                            {error, term()}.
+start( Name, Module ) -> start( Name, Module, [] ).
+
 %% @private
 %% @doc Initialize the buffer; returns a factory initializer for this buffer
 %%   type.
 %% @end 
--spec start( Args :: [term()] ) -> 
+-spec start( Name :: atom(), Module ::atom(), Args :: [term()] ) ->
                             {ok, pid(), libemp_buffer_init()} |
-                            {ok, libemp_buffer_init()} | 
+                            {ok, false, libemp_buffer_init()} |
                             {error, term()}.
-start( BufferInstanceArgs ) ->
-    {buffer_module, Mod} = proplists:lookup(buffer_module, BufferInstanceArgs),
+start( Name, Mod, BufferInstanceArgs ) ->
     case
         catch wrap_extern( Mod, initialize, [BufferInstanceArgs] ) 
     of
         {ok, Ref} ->
-            {ok, #libemp_buffer_initializer{module=Mod, init_ref=Ref}};
+            {ok, false, new_initializer(Name, Mod, Ref)};
         {ok, Pid, Ref} ->
-            {ok, Pid, #libemp_buffer_initializer{module=Mod, init_ref=Ref}};
+            {ok, Pid, new_initializer(Name, Mod, Ref)};
         {stop, Reason} -> 
             {error, Reason};
         {'EXIT', Reason} ->
@@ -189,23 +254,35 @@ destroy( #libemp_buffer_initializer{ module=Mod, init_ref=Ref }=Init ) ->
     wrap_extern(Mod, destroy, [Ref]), % ignore errors.
     remove_buffer( Init ).
 
-
-%% @doc Drop all events in a buffer until it's size is 0. Only should be used 
+%% @doc Drop all events in a buffer until it's size is 0. Only should be used
 %%   in validation, and is not safe for production use (hangs until complete,
 %%   even if producers keep pushing events to it).
 %% @end
-%% TODO: Make into an optional callback?
 -spec flush( libemp_buffer() ) -> ok.
-flush( Buffer ) ->
+flush( Buffer ) -> libemp_buffer:drop( Buffer, -1 ).
+
+%% @doc Performs N take/1 operations from the queue, effectively drops N events,
+%%   unless take is in 'batch' mode. In that case, it would take N batches. This
+%%   is a safer "flush" which will let you decide how long you are willing to
+%%   wait to flush.
+%% @end
+-spec drop( libemp_buffer(), integer() ) -> ok.
+drop( _, 0 ) -> ok;
+drop( Buffer, Itters ) ->
     case libemp_buffer:size( Buffer ) of
         0 -> ok;
         _ -> libemp_buffer:take( Buffer ), 
-             libemp_buffer:flush( Buffer )
+             libemp_buffer:drop( Buffer, Itters - 1 )
     end.
 
 %%% =========================================================================
 %%% Internal Functionality
 %%% =========================================================================
+
+%% @hidden
+%% @doc Create a new initializer reference object for a buffer.
+new_initializer( Name, Module, Ref ) ->
+  #libemp_buffer_initializer{id=Name, module=Module, init_ref=Ref}.
 
 %% @hidden
 %% @doc Check a proplist for a value, verify it is a function and that it's
@@ -223,16 +300,31 @@ get_callback( FunName, Arity, Callbacks ) ->
 %% @end
 wrap_extern( AnonFun, Args ) -> erlang:apply( AnonFun, Args ).
 wrap_extern( Module, FunName, Args ) -> erlang:apply( Module, FunName, Args ). 
+wrap_extern( Module, FunName, Args, Default ) ->
+  case erlang:function_exported( Module, FunName, length(Args) ) of
+      true  -> wrap_extern( Module, FunName, Args );
+      false -> Default
+  end.
 
 %% @hidden
-%% @doc Save the buffer according to the LibEMP System configuration. This may
-%%   involve dumping the reference into an ets table.
+%% @doc Save the buffer according to the LibEMP System configuration. This
+%%   involves pulling out the unique ID and saving it to the Node's State
+%%   Server. 
 %% @end
-save_buffer( _BufferObj, _SystemArgs ) -> ok. %TODO: Save the libemp buffer obj.
+save_buffer( #libemp_buffer_initializer{id=undefined}=BufferObj ) ->
+    NewUniqueID = erlang:unique_integer([positive]),
+    libemp_node:save_buffer(
+      NewUniqueID, 
+      BufferObj#libemp_buffer_initializer{id=NewUniqueID} 
+    );
+save_buffer( #libemp_buffer_initializer{id=ID}=BufferObj ) ->
+    % We already have an ID, so push.
+    libemp_node:save_buffer( ID, BufferObj ).
 
 %% @hidden
 %% @doc Remove the buffer according to the LibEMP System Configuration.
-remove_buffer( _BufferObj ) -> ok. %TODO: Destroy the saved libemp buffer obj. 
+remove_buffer( #libemp_buffer_initializer{id=ID} ) -> 
+    libemp_node:remove_buffer( ID ).
 
 %% @hidden
 %% @doc Link a process identifier, but if there is an error doing so return it. 

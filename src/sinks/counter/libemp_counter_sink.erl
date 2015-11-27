@@ -123,6 +123,10 @@ build_context_state( _Args ) ->
 %% @end
 get_current_time() -> erlang:abs( erlang:monotonic_time(seconds) ).
 
+%%% ==========================================================================
+%%% Counter Modes 
+%%% ==========================================================================
+
 %% @hidden
 %% @doc Shape the oncoming traffic by counting "like" events until a threshold
 %%   and then allow the newest event through.
