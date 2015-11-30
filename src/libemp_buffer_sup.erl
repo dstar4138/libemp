@@ -65,19 +65,6 @@ init( _ ) ->
                     shutdown => brutal_kill}],
     {ok, {SupFlags, ChildSpecs}}.
 
-%% TODO: DEAN: I've commented this out for the time being so we can expirement with AppConfig.
-%init([]) ->
-%    BufferArgs = libemp_util:get_cfgs( buffers ),
-%    init([BufferArgs]);
-%init([BufferArgs]) ->
-%    Defaults = get_default_configs(),
-%    Overrides = lists:keymerge(1, BufferArgs, Defaults ),
-%    MFA = build_mfa( Overrides ),
-%    SupFlags = build_supflags( Overrides ),
-%    {ok, { SupFlags,
-%           [ #{ id => libemp_buffer, start => MFA, type => worker } ]
-%         }}.
-
 %%%===================================================================
 %%% Buffer Setup
 %%%===================================================================
@@ -110,80 +97,4 @@ get_buffers() ->
       )
   end.
 
-%% TODO: Delete all of the following functions as they should not be needed anymore.
-%%% @hidden
-%%% @doc Generate the supervisory flags for this buffer. By default, we just
-%%%   forward the crash upwards which lets the rest of the system crash.
-%%% @end
-%build_supflags( Overrides ) ->
-%    proplists:get_value( buffer_sup_flags,
-%                         Overrides,
-%                         #{ strategy  => one_for_one,
-%                            intensity => 0, % No restarts,
-%                            period    => 1  % within the timeframe of 1 second.
-%                          }).
-%
-%%% @hidden
-%%% @doc Build the MFA, complete with configuration for the start up of the
-%%%   LibEMP Buffer.
-%%% @end
-%build_mfa( Overrides ) ->
-%    {libemp_buffer, start_link, [Overrides]}.
-%
-%%% @hidden
-%%% @doc Get the default Buffer configuration in the default path location,
-%%%   or with the override queue location.
-%%% @end
-%-spec get_default_configs() -> [term()].
-%get_default_configs() ->
-%    {Module, ExPath} = get_module_path(),
-%    case file:consult( ExPath ) of
-%        {error, _} ->
-%            ?WARN("Unable to find config for '~p' at '~p'", [Module, ExPath]),
-%            [];
-%        {ok, Value} ->
-%            Value
-%    end.
-%
-%%% @hidden
-%%% @doc Get the module atom and the default configuration path.
-%-spec get_module_path() -> {atom(), string()}.
-%get_module_path() ->
-%    % Get path, fail if not defined.
-%    Buffer = libemp_util:get_cfg(buffers, buffer_module),
-%    ExPath = case
-%                % Get path optionally, otherwise we can try to find it.
-%                libemp_util:get_cfg( buffers,
-%                                     buffer_config_path,
-%                                     undefined )
-%             of
-%                undefined -> get_builtin_path( Buffer );
-%                Path -> Path
-%             end,
-%    {Buffer, ExPath}.
-%
-%%% @hidden
-%%% @doc Get the default configuration path of the builtin LibEMP Queue.
-%-spec get_builtin_path( atom() ) -> string().
-%get_builtin_path( Module ) ->
-%    QueueName = queue_name_from_module( Module ),
-%    ExPath = lists:flatten(["src/buffers/",QueueName,"/",Module,".cfg"]),
-%    case filelib:last_modified( ExPath ) of
-%        0 -> % Does not exist, try the next common place (i.e. in ebin).
-%            NewPath = lists:flatten(["../src/buffers/testing/",Module,".cfg"]),
-%            case filelib:last_modified(NewPath) of
-%                0 -> error({badarg,Module});
-%                _ -> NewPath
-%            end;
-%        _ -> ExPath
-%    end.
-%
-%%% @hidden
-%%% @doc Pull out the queue name from the Module name, if it follows the normal
-%%%   pattern. Otherwise it will raise a match error.
-%%% @end
-%-spec queue_name_from_module( atom() ) -> string().
-%queue_name_from_module( Module ) ->
-%   [_, QueueName, _] = string:tokens( atom_to_list(Module), "_" ),
-%   QueueName.
 

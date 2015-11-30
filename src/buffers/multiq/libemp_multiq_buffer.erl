@@ -8,7 +8,9 @@
 %%%     theoretical limit of erlang's gen_server message handling.
 %%%
 %%%     Statistics:
-%%%
+%%%         * Single Perfect Producer: > 900k eps
+%%%         * Single Perfect Consumer: > 1.5m eps
+%%%         * Throughput: 1-1 (> 1.2m eps), 50-1 (> 2.7m eps)
 %%%
 -module(libemp_multiq_buffer).
 

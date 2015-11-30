@@ -171,19 +171,19 @@ start_link( Name, Mod, Args ) ->
 start( Module ) -> start( Module, Module, [] ).
 
 %% @private
-%% @doc Initialize the buffer with default arguments but with a new name;
-%%   returns a factory initializer for this buffer type. Useful if you have
-%%   multiple buffers with the same Module implementation.
+%% @doc Initialize the buffer with alternative arguments;
+%%   returns a factory initializer for this buffer type.
 %% @end
 -spec start( Name :: atom(), Module ::atom() ) ->
                             {ok, pid(), libemp_buffer_init()} |
                             {ok, false, libemp_buffer_init()} |
                             {error, term()}.
-start( Name, Module ) -> start( Name, Module, [] ).
+start( Module, Args ) -> start( Module, Module, Args ).
 
 %% @private
 %% @doc Initialize the buffer; returns a factory initializer for this buffer
-%%   type.
+%%   type. Useful if you have multiple buffers with different arguments and
+%%   need them all running at the same time.
 %% @end 
 -spec start( Name :: atom(), Module ::atom(), Args :: [term()] ) ->
                             {ok, pid(), libemp_buffer_init()} |
@@ -324,7 +324,8 @@ save_buffer( #libemp_buffer_initializer{id=ID}=BufferObj ) ->
 %% @hidden
 %% @doc Remove the buffer according to the LibEMP System Configuration.
 remove_buffer( #libemp_buffer_initializer{id=ID} ) -> 
-    libemp_node:remove_buffer( ID ).
+    catch libemp_node:remove_buffer( ID ), % Hide errors, may not be saved.
+    ok.
 
 %% @hidden
 %% @doc Link a process identifier, but if there is an error doing so return it. 
