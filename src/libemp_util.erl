@@ -4,6 +4,7 @@
 
 -define(APPLICATION,libemp).
 
+-export([wrap_extern/2,wrap_extern/3,wrap_extern/4]).
 -export([merge_default_args/2]).
 -export([get_cfgs/1]).
 -export([escaping_foldl/3]).
@@ -42,3 +43,14 @@ escaping_foldl( Fun, Acc, [H|T] ) ->
         {ok,NAcc}       -> escaping_foldl( Fun, NAcc, T );
         NAcc            -> escaping_foldl( Fun, NAcc, T )
     end.
+
+%% @doc Wrap calls into behaviour implementations. This is were we can
+%%   optionally turn on logging, verbosity, etc.
+%% @end
+wrap_extern( AnonFun, Args ) -> erlang:apply( AnonFun, Args ).
+wrap_extern( Module, FunName, Args ) -> erlang:apply( Module, FunName, Args ).
+wrap_extern( Module, FunName, Args, Default ) ->
+  case erlang:function_exported( Module, FunName, length(Args) ) of
+    true  -> wrap_extern( Module, FunName, Args );
+    false -> Default
+  end.

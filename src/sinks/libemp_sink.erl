@@ -11,6 +11,7 @@
 -include("../internal.hrl").
 
 -export([start/2,stop/2]).
+-export([validate_configs/2]).
 -export([process/3]).
 -export([is_pure/1]).
 
@@ -19,10 +20,10 @@
 %%%   function, it may require no startup or teardown. However, if you require
 %%%   a particular module loaded, you can verify and still remain pure (just
 %%%   return 'ok').
--optional_callbacks([setup/1, destroy/2]).
+-optional_callbacks([setup/1, destroy/2, validate_configs/1]).
 
 %%% Initialize your sink.
--callback setup( Args :: term() ) -> 
+-callback setup( Args :: [ term() ] ) ->
     ok |                        % Setup successful and the sink is pure.
     {ok, State :: term()} |     % Setup successful and the sink requires state.
     {stop, Reason :: term()} |  % Setup failed, return an Error.
@@ -34,6 +35,12 @@
                               term()),             % Unknown error
                     State :: term() ) -> 
     term(). % Return ignored.
+
+%%% Validate the configurations before startup.
+-callback validate_configs( [ Args::term() ] ) ->
+    ok |                        % If all is as expected.
+    {error, Reason :: term()}.  % If LibEMP should not startup due to mis-config
+
 
 %%% Required Behaviour for all Sinks:
 
@@ -115,6 +122,14 @@ process( Event, Buffer, #libemp_sink{module=Module, state=State}=Sink ) ->
 is_pure( #libemp_sink{pure=true} ) -> true;
 is_pure( _ ) -> false.
 
+%% @doc Validate the sink configurations given the Module defining the Sink
+%%    behaviour, and the Configs which should be validated by the Module.
+%% @end
+validate_configs( Module, Configs ) when is_atom( Module ) ->
+    case code:which( Module ) of
+        non_existing -> {error, {non_existing, Module}};
+        _ -> libemp_util:wrap_extern( Module, validate_configs, [Configs], ok )
+    end.
 
 %%% ==========================================================================
 %%% Internal Functionality

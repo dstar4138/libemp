@@ -132,7 +132,7 @@ validate_configs( Name, Module, Configs ) ->
     { _, non_existing } ->
       {error, {non_existing, Module}};
     _Success ->
-      wrap_extern( Module, validate_configs, [ Configs ], ok )
+      libemp_util:wrap_extern( Module, validate_configs, [ Configs ], ok )
   end.
 
 
@@ -191,7 +191,7 @@ start( Module, Args ) -> start( Module, Module, Args ).
                             {error, term()}.
 start( Name, Mod, BufferInstanceArgs ) ->
     case
-        catch wrap_extern( Mod, initialize, [BufferInstanceArgs] ) 
+        catch libemp_util:wrap_extern( Mod, initialize, [BufferInstanceArgs] )
     of
         {ok, Ref} ->
             {ok, false, new_initializer(Name, Mod, Ref)};
@@ -210,7 +210,7 @@ start( Name, Mod, BufferInstanceArgs ) ->
 register( AsTakeOrGive, 
           #libemp_buffer_initializer{ module=Mod, init_ref=Ref}=Init ) -> 
     case 
-        catch wrap_extern( Mod, register, [AsTakeOrGive, Ref] )
+        catch libemp_util:wrap_extern( Mod, register, [AsTakeOrGive, Ref] )
     of
         {ok, Buffer} -> 
             {ok, Buffer#libemp_buffer{ref=Init}};
@@ -226,22 +226,23 @@ register( AsTakeOrGive,
 
 %% @doc Optimistically take one or more events off the buffer for consumption.
 -spec take( libemp_buffer() ) -> [ libemp_event() ].
-take( #libemp_buffer{take=Take} ) -> wrap_extern(Take,[]).
+take( #libemp_buffer{take=Take} ) -> libemp_util:wrap_extern(Take,[]).
 
 %% @doc Determine the size of the buffer. Only should be used in validation.
 -spec size( libemp_buffer() ) -> non_neg_integer().
-size( #libemp_buffer{size=Size} ) -> wrap_extern(Size,[]).
+size( #libemp_buffer{size=Size} ) -> libemp_util:wrap_extern(Size,[]).
 
 %% @doc Push an event into the buffer.
 -spec give( libemp_event(), libemp_buffer() ) -> ok.
-give( Event, #libemp_buffer{give=Give} ) -> wrap_extern(Give,[Event]).
+give( Event, #libemp_buffer{give=Give} ) ->
+    libemp_util:wrap_extern(Give,[Event]).
 
 %% @doc Unregister the current buffer object. Note, the buffer object will no
 %%   longer be valid its usage after has undefined behaviour.
 %% @end
 -spec unregister( libemp_buffer() ) -> ok.
 unregister( #libemp_buffer{unregister=Unregister} ) -> 
-    wrap_extern(Unregister,[]).
+    libemp_util:wrap_extern(Unregister,[]).
 
 %% @doc Destroy the buffer. Note, the buffer object will no longer be valid for 
 %%   all processes and usage from any object after destruction has undefined
@@ -251,7 +252,7 @@ unregister( #libemp_buffer{unregister=Unregister} ) ->
 destroy( #libemp_buffer{ref=BufferInit} ) -> 
     destroy( BufferInit );
 destroy( #libemp_buffer_initializer{ module=Mod, init_ref=Ref }=Init ) -> 
-    wrap_extern(Mod, destroy, [Ref]), % ignore errors.
+    libemp_util:wrap_extern(Mod, destroy, [Ref]), % ignore errors.
     remove_buffer( Init ).
 
 %% @doc Drop all events in a buffer until it's size is 0. Only should be used
@@ -293,18 +294,6 @@ get_callback( FunName, Arity, Callbacks ) ->
         {_, PossibleFun} when is_function(PossibleFun, Arity) -> PossibleFun;
         _ -> false
     end.
-
-%% @hidden
-%% @doc Wrap calls into behaviour implementations. This is were we can 
-%%   optionally turn on logging, verbosity, etc.
-%% @end
-wrap_extern( AnonFun, Args ) -> erlang:apply( AnonFun, Args ).
-wrap_extern( Module, FunName, Args ) -> erlang:apply( Module, FunName, Args ). 
-wrap_extern( Module, FunName, Args, Default ) ->
-  case erlang:function_exported( Module, FunName, length(Args) ) of
-      true  -> wrap_extern( Module, FunName, Args );
-      false -> Default
-  end.
 
 %% @hidden
 %% @doc Save the buffer according to the LibEMP System configuration. This
