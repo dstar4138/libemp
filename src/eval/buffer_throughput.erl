@@ -11,6 +11,7 @@
 run_all() ->
   run_tests( libemp_simple_buffer, [] ),
   run_tests( libemp_multiq_buffer, [] ),
+  run_tests( libemp_tee_buffer,    [] ),
 %% The following have a race condition during our throughput tests.
 %  run_tests( libemp_epocxy_buffer, [{buffer_type, ring}, {buffer_size, ?FILLUP_COUNT}] ),
 %  run_tests( libemp_epocxy_buffer, [{buffer_type, fifo}]),
@@ -24,13 +25,18 @@ run( QueueName ) -> run( QueueName, [] ).
 %% @end
 run_tests( QueueName ) -> run_tests( QueueName, [] ).
 run_tests( QueueName, BufferArgs ) ->
-    io:format("~p: Running ~p fill up test with ~p producers...~n",[QueueName, ?FILLUP_COUNT, 1]),
     {ok, Buffer1} = make_buffer( QueueName, BufferArgs ),
+
+    %Hack: To get Tee to function properly. Pullout needs to already be enabled.
+    Consumers = make_procs( take, Buffer1, 1 ),
+    PulloutTest = fun() -> start_procs( Consumers ), hang_for( 1 ) end,
+
+    io:format("~p: Running ~p fill up test with ~p producers...~n",[QueueName, ?FILLUP_COUNT, 1]),
     time_run(fun fillup_test/2, [Buffer1,1]),
 
     timer:sleep(1000),
     io:format("~p: Running ~p pull out test with ~p consumers...~n",[QueueName, ?FILLUP_COUNT, 1]),
-    time_run(fun pullout_test/2, [Buffer1,1]),
+    time_run(fun() -> PulloutTest end, []),
     libemp_buffer:destroy( Buffer1 ),
 
     timer:sleep(1000),
@@ -100,10 +106,6 @@ time_run( TestFun, Args ) ->
 fillup_test( Buffer, ProducerCount ) ->
     Producers = make_procs( give, Buffer, ProducerCount ),
     fun() -> start_procs( Producers ), hang_for( ProducerCount ) end.
-
-pullout_test( Buffer, ConsumerCount ) ->
-    Consumers = make_procs( take, Buffer, ConsumerCount ),
-    fun() -> start_procs( Consumers ), hang_for( ConsumerCount ) end.
 
 parallel_test( Buffer, ProducerCount ) ->
     Producers = make_procs( give, Buffer, ProducerCount ),
