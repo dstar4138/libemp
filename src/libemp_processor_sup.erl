@@ -36,16 +36,19 @@ start_link() ->
     end.
 
 %% @doc Build and add a processor to the supervisor. It will immediately
-%%   begin pulling from the buffer.
+%%   begin pulling from the buffer after the sink starts up..
 %% @end 
-add_processor( BufferName, Handler, StackConfig ) ->
+add_processor( BufferName, SinkModule, SinkConfig ) ->
     case
-        libemp_processor:validate_configs( BufferName, Handler, StackConfig )
+        {
+          libemp_node:get_buffer( BufferName ),
+          libemp_sink:validate_configs( SinkModule, SinkConfig )
+        }
     of
-        ok ->
-            supervisor:start_child( ?MODULE, [BufferName,Handler,StackConfig] );
-        {error,_}=Error -> 
-            Error
+      {{error,_}=Err,_} -> Err;
+      {_,{error,_}=Err} -> Err;
+      _Success ->
+          supervisor:start_child( ?MODULE, [BufferName,SinkModule,SinkConfig] )
     end.
 
 %%%===================================================================
@@ -74,7 +77,7 @@ init( _ ) ->
 %%   that we start up.
 %% @end 
 initialize_processors( ) ->
-    lists:foreach( fun({BufferName,Handler,StackConfig}) ->
-        add_processor(BufferName,Handler,StackConfig)
-    end, libemp_util:get_cfgs( stacks ) ).
+    lists:foreach( fun({BufferName,SinkName,SinkConfig}) ->
+        add_processor(BufferName,SinkName,SinkConfig)
+    end, libemp_util:get_cfgs( sinks ) ).
 

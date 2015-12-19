@@ -10,7 +10,8 @@
 -export([process/3]).
 
 %% @doc Process an event by logging it's existence.
-process( Event, _BufRef, _State ) -> 
-    error_logger:log("EVENT: ~p~n",[Event]),
+process( Event, _BufRef, _State ) ->
+    %TODO: Switch over to lager.
+    error_logger:info_report(io_lib:format("EVENT: ~p~n",[Event])),
     next.
 

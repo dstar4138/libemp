@@ -8,6 +8,7 @@
 -export([merge_default_args/2]).
 -export([get_cfgs/1]).
 -export([escaping_foldl/3]).
+-export([function_exists/1, function_exists/2]).
 
 merge_default_args( Overrides, Args ) ->
     CleanOverrides = lists:keysort( 1, Overrides ),
@@ -54,3 +55,23 @@ wrap_extern( Module, FunName, Args, Default ) ->
     true  -> wrap_extern( Module, FunName, Args );
     false -> Default
   end.
+
+%% @doc Check if a function exists in the current runtime.
+function_exists( Fun ) -> function_exists( Fun, false ).
+
+%% @doc Check if a function exists. If it does not exist in the current runtime
+%%    it will attempt to load the module to check if the function is exported.
+%% @end
+function_exists( Fun, LoadIfNot ) ->
+  case erlang:fun_info( Fun, type ) of
+    {type,internal} -> true; % Should be defined, the name is a refrence.
+    {type,external} ->
+      {M,F,A} = erlang:fun_info_mfa( Fun ),
+      load_module_maybe(LoadIfNot, M),
+      erlang:function_exported(M,F,A)
+  end.
+
+%% @hidden
+%% @doc Maybe load the module based on a predicate result.
+load_module_maybe( false, _ ) -> ok;
+load_module_maybe( true, Module ) -> code:ensure_loaded( Module ).

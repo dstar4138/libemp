@@ -10,7 +10,7 @@
 -compile(inline).
 -include("../internal.hrl").
 
--export([start/2,stop/2]).
+-export([setup/2,destroy/2]).
 -export([validate_configs/2]).
 -export([process/3]).
 -export([is_pure/1]).
@@ -69,44 +69,39 @@
             state       :: term(),   % What is the state of the sink. 
             pure = true :: boolean() % Can we make an assumption of purity.
         }).
--type libemp_sink() :: #libemp_sink{}.
+-opaque libemp_sink() :: #libemp_sink{}.
 -export_type([libemp_sink/0]).
 
 
 %% @doc Start up the Sink and return the LibEMP Sink object if successful.
--spec start( Module :: module(), State :: term() ) -> 
+-spec setup( Module :: module(), State :: term() ) ->
     {ok, libemp_sink()} | {stop, Reason :: term()} | ignore.
-start( Module, Args ) ->
+setup( Module, Args ) ->
     case 
-        erlang:function_exported( Module, setup, 1 )
+        libemp_util:function_exists( fun Module:setup/1, true )
     of
         true  -> do_setup( Module, Args );
         false -> {ok, #libemp_sink{module=Module, state=[]}}
     end.
 
 %% @doc Stop a Sink, if it is pure, this does nothing.
--spec stop( term(), libemp_sink() ) -> term().
-stop( _, #libemp_sink{state=[],pure=true} ) -> 
+-spec destroy( term(), libemp_sink() ) -> term().
+destroy( _, #libemp_sink{state=[],pure=true} ) ->
     ok;
-stop( Reason, #libemp_sink{module=Module,state=State} ) ->
-    case
-        erlang:function_exported( Module, destroy, 2 )
-    of
-        true -> do_destroy( Reason, Module, State );
-        _ -> ok
-    end.
+destroy( Reason, #libemp_sink{module=Module,state=State} ) ->
+    do_destroy( Reason, Module, State ).
 
 %% @doc Run a single event process and return the new Sink closure and the
 %%   event after the Sink was able to modify if need be.
 %% @end
--spec process( libemp_event(), libemp_buffer:libemp_buffer(), libemp_sink() ) -> 
-    {libemp_event(), libemp_sink()}. 
+-spec process( libemp_event(), libemp_buffer:libemp_buffer(), libemp_sink() ) ->
+    {next, libemp_event(), libemp_sink()} | {drop, libemp_sink()}.
 process( Event, Buffer, #libemp_sink{module=Module, state=State}=Sink ) ->
     case do_process( Event, Buffer, Module, State ) of
         next ->
             {next, Event, Sink};
-        {next,NewState} -> 
-            {next, Event, Sink#libemp_sink{state=NewState}}; 
+        {next,NewState} ->
+            {next, Event, Sink#libemp_sink{state=NewState}};
         {next,NewEvent,NewState} ->
             {next, NewEvent, Sink#libemp_sink{state=NewState}};
         drop ->
@@ -118,7 +113,7 @@ process( Event, Buffer, #libemp_sink{module=Module, state=State}=Sink ) ->
 %% @doc If the sink is pure, this returns true. Purity in this case means that
 %%   it does not rely on state. This means we can reschedule and run sinks in
 %%   parallel (and generally optimize more when possible).
-%% @end 
+%% @end
 is_pure( #libemp_sink{pure=true} ) -> true;
 is_pure( _ ) -> false.
 
@@ -126,8 +121,8 @@ is_pure( _ ) -> false.
 %%    behaviour, and the Configs which should be validated by the Module.
 %% @end
 validate_configs( Module, Configs ) when is_atom( Module ) ->
-    case code:which( Module ) of
-        non_existing -> {error, {non_existing, Module}};
+    case libemp_util:function_exists( fun Module:validate_configs/1, true ) of
+        false -> {error, {non_existing, Module}};
         _ -> libemp_util:wrap_extern( Module, validate_configs, [Configs], ok )
     end.
 
@@ -141,7 +136,7 @@ validate_configs( Module, Configs ) when is_atom( Module ) ->
 %% @end
 do_setup( Module, Args ) ->
     case 
-        catch erlang:apply( Module, setup, [Args] )
+        catch libemp_util:wrap_extern( Module, setup, [Args], ok )
     of
         ok -> 
             {ok, #libemp_sink{module=Module, state=[]}};
@@ -154,12 +149,16 @@ do_setup( Module, Args ) ->
 %% @hidden
 %% @doc Run the destroy callback.
 do_destroy( Reason, Module, State ) ->
-    catch erlang:apply( Module, destroy, [Reason, State] ).
+    %TODO: General debuggery.
+    %catch
+     libemp_util:wrap_extern(Module, destroy, [Reason, State], ok).
 
 %% @hidden
 %% @doc Run the process callback given an event/buffer pair and the state
 %%   of the current module.
 %% @end 
 do_process( Event, Buffer, Module, State ) ->
-    catch erlang:apply( Module, process, [Event, Buffer, State] ). 
+    %TODO: General debuggery.
+    %catch
+     libemp_util:wrap_extern( Module, process, [Event, Buffer, State] ).
 

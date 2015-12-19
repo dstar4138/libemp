@@ -1,59 +1,58 @@
-%%% LibEMP Event Processor -  
+%%% LibEMP Processor -
 %%%
-%%%     The Event Processor wraps a stack of Event Sinks initialized during
-%%%     start up and a configuration of how to handle Sink faults. 
+%%%   Processors wrap around the Event Sink so as to provide the wrapper
+%%%   coordination of Buffer wiring and Error handling. Multiple processors
+%%%   can be wired to the same Buffer. This allows for extreme parallel
+%%%   processing as long as the Sinks they wrap have been written correctly.
 %%%
-%%%     Note: The Processor does not follow gen_server, instead it uses the
-%%%     stdlib `gen` module to standardize its looping functionality, see
-%%%     `gen_event` as this was modeled after that (except using a `pull`
-%%%     rather than a `push`).
+%%%   Note however, that if each processor has a different Sink, the
+%%%   possibility that the Sink misses an event it is expecting increases.
+%%%   Other mechanisms to provide parallelism is to give the Processor a
+%%%   Stack Sink, and have that worry about whether it. That way you can have
+%%%   serialization with as much parallelism as your system implicitly allows.
+%%%
+%%%   Note: The Procesor does not follow standard `gen_server' behaviour,
+%%%   instead it uses the stdlib `gen' module to standardize its looping.
+%%%   See `gen_event' as this was modeled after that (except instead of being
+%%%   a 'push' based event loop, it is a 'pull' one). This is uses to compensate
+%%%   for any deviation from the Buffer functionality.
 %%%
 -module(libemp_processor).
 
 %% API
--export([start_link/3,validate_configs/3,push/2]).
+-export([start_link/3]).
+-export([push/2]).
 
-%% Private `gen` API
--export([init_it/6]).
--export([terminate/4]).
-
-%% Private Exports
--export([run_stack/4]).
+%% Private 'gen' API.
+-export([init_it/6, terminate/4]).
 
 -include("internal.hrl").
-
 -define(NO_CALLBACK, 'no callback module').
-
--type libemp_processor() :: pid() | atom().
 
 %%%===================================================================
 %%% Internal API
 %%%===================================================================
 
-%% @doc Starts the processor server.
--spec start_link( atom(), fun(), [term()] ) -> {ok, pid()} |
-                                               ignore | {error, term()}.
-start_link( BufferName, HandlerFun, StackConfigs ) ->
-    gen:start( ?MODULE, link, ?NO_CALLBACK, [], [
-        BufferName, HandlerFun, StackConfigs
-    ] ).
+%% @doc Starts the processor server and links it to the buffer.
+-spec start_link( atom(), atom(), [term()] ) ->
+                      {ok, pid()} | ignore | {error, term()}.
+start_link( BufferName, SinkModule, SinkConfigs ) ->
+  gen:start( ?MODULE, link, ?NO_CALLBACK, [], [
+    BufferName, SinkModule, SinkConfigs
+  ] ).
 
-%% @doc Validate the stack configurations before starting it up.
--spec validate_configs( atom(), fun(), [term()] ) -> ok | {error, term()}.
-validate_configs( BufferName, HandlerFun, StackConfigs ) ->
-    %TODO: Check if buffername is running, that HandlerFun meets criteria,
-    %  and that each sink in the stack has valid configurations.
-    ok.
-
-%% @doc Push a set of events to the processor to work on. This should be
-%%   done only for debugging or by the Buffer implementation itself if
-%%   push processing is neccessary. If the processor is already working
-%%   on a set of events, these will be effectively appended to the end.
+%% @doc Push a set of events to the processor to work on. This should be done
+%%   only for debugging or by the Buffer implementation itself if push
+%%   processing is neccessary. If the processor is already working on a set of
+%%   events, these will be effectively appended to the end. If the Processor
+%%   is blocked on a buffer's implementation of a `take' this will NOT BYPASS,
+%%   instead it will wait until the take completes and then append to the
+%%   working set.
 %% @end
 -spec push( [ libemp_event() ], libemp_processor() ) -> ok.
-push( Events, Processor ) ->
-    Processor ! {events, Events},
-    ok.
+push( Events, ProcessorRef ) ->
+  ProcessorRef ! {events, Events},
+  ok.
 
 %%%===================================================================
 %%% Private API
@@ -62,32 +61,35 @@ push( Events, Processor ) ->
 %% @private
 %% @doc Initialize the generic pull server. This will loop and pull for
 %%   events from a LibEMP Buffer by requesting
-%% @end 
+%% @end
 init_it( Starter, self, Name, Mod, Args, Options ) ->
-    init_it( Starter, self(), Name, Mod, Args, Options ); 
-init_it( Starter, Parent, _, _, _, Options ) ->
-    process_flag( trap_exit, true ),
-    Debug = gen:debug_options( Options ),
-    case catch init_state() of
-        {ok, Buff, Stack} -> 
-            proc_lib:init_ack( Starter, {ok, self()} ),
-            loop( Parent, Buff, Stack, Debug );
-        {'EXIT', Reason} -> 
-            proc_lib:init_ack( Starter, {error, Reason} ),
-            exit(Reason);
-        Else ->
-            proc_lib:init_ack( Starter, {error, Else} ),
-            exit(Else)
-    end.
+  init_it( Starter, self(), Name, Mod, Args, Options );
+init_it( Starter, Parent, _, _, Args, Options ) ->
+  process_flag( trap_exit, true ),
+  Debug = gen:debug_options( Options ),
+  case
+      catch init_state( Args )
+  of
+    {ok, Buff, Sink} ->
+      proc_lib:init_ack( Starter, {ok, self()} ),
+      loop( Parent, Buff, Sink, Debug );
+
+    {'EXIT', Reason} ->
+      proc_lib:init_ack( Starter, {error, Reason} ),
+      exit(Reason);
+    Else ->
+      proc_lib:init_ack( Starter, {error, Else} ),
+      exit(Else)
+  end.
 
 %% @private
-%% @doc Run an Event through a Sink Stack. It requires a refrence to a
-%%   Buffer so as to retrigger events if neccessary.
+%% @doc Terminate the pull server. This also has the effect of shutting down the
+%%    embedded Sink and unregistering from the buffer.
 %% @end
-run_stack( Event, BufferRef, Stack, _DebugOptions ) ->
-    %TODO: examine DEBUG options to manipulate the run.
-    libemp_sink_stack:run( Event, BufferRef, Stack ). 
-
+terminate( Reason, BufferRef, SinkRef, _Debug ) ->
+  libemp_buffer:unregister( BufferRef ),
+  libemp_sink:stop( Reason, SinkRef ),
+  exit( Reason ).
 
 %%%===================================================================
 %%% Internal functions
@@ -95,62 +97,44 @@ run_stack( Event, BufferRef, Stack, _DebugOptions ) ->
 
 %% @hidden
 %% @doc Initialize the state by pulling from application configuration.
-init_state() ->
-    {ok, StackConfigs} = get_stack_configs(),
-    {ok, Stack} = build_stack( StackConfigs ),
-    {ok, Buffer} = determine_buffer_ref(),
-    {ok, BufferRef} = libemp_buffer:register( take, Buffer ),
-    {ok, BufferRef, Stack}.
+init_state([ BufferName, SinkModule, SinkConfigs ]) ->
+  {ok, BufferRef} = libemp_buffer:register( take, BufferName ),
+  case libemp_sink:start( SinkModule, SinkConfigs ) of
+    {ok, SinkRef} -> {ok, BufferRef, SinkRef};
+    Err ->
+      libemp_buffer:unregister( BufferRef ),
+      Err
+  end.
 
 %% @hidden
-%% @doc Listen for events being pushed, or pull the next batch. 
-loop( Parent, Buffer, Stack, Debug ) ->
-    receive
-        {events, Events} ->
-            process( Events, Buffer, Stack, Debug ),
-            loop( Parent, Buffer, Stack, Debug );
-        shutdown -> 
-            terminate( Parent, Buffer, Stack, Debug );
-        Unknown ->
-            ?ERROR("Unknown Message to libemp_processor: ~p~n",[Unknown])
-    after 0 ->
-        Events = libemp_buffer:take( Buffer ), 
-        NewStack = process( Events, Buffer, Stack, Debug ),
-        loop( Parent, Buffer, NewStack, Debug )
-    end.
-
-%% @hidden
-%% @doc Destroy all the Sinks in the Stack, then unregister from the Buffer,
-%%   finally remove self from Parent.
-%% @end  
-terminate( Parent, Buffer, Stack, Debug ) -> 
-    ok. %TODO: contact buffer, stacks and parent due to shutdown.
-
-%% @hidden
-%% @doc Process a set of events in order via the Stack of Sinks.
-process( Events, BufferRef, Stack, Debug ) ->
-   lists:foldl( fun( Event, StackAcc ) ->
-                    libemp_processor:run_stack( Event, BufferRef, StackAcc, Debug )
-                end, Stack, Events ).
-
-%% @hidden
-%% @doc Get the configurations for the stack this processor will contain.
-get_stack_configs() -> 
-    %TODO: Get the configuration. 
-    {ok,[]}.
-
-%% @hidden
-%% @doc Build the set of Sinks into a Stack.
-build_stack( _Configs ) -> 
-    %TODO: Build each sink and add it to a stack.
-    {ok, []}.
-
-%% @hidden
-%% @doc Pulling Buffer reference out of Node's State Server. Will also register
-%%   with the buffer as a consumer.
+%% @doc Run the processing loop. Listen for events being pushed or pull the
+%%   next batch from the Buffer.
 %% @end
-determine_buffer_ref() ->
-    %TODO: wire up to specific buffer. For now just pulling from top of registry.
-    {ok, Buffer} = libemp_node:get_buffer(),
-    {ok, _ConsumerSideRef} = libemp_buffer:register( take, Buffer ).
+loop( Parent, Buffer, Sink, DebugOpts ) ->
+  receive
+    {events, Events} ->
+        NewSink = process( Events, Buffer, Sink, DebugOpts ),
+        loop( Parent, Buffer, NewSink, DebugOpts );
 
+    shutdown -> terminate( shutdown, Buffer, Sink, DebugOpts );
+    Unknown  -> ?ERROR("Unknown Message to libemp_processor: ~p~n",[Unknown])
+  after 0 ->
+    Events = libemp_buffer:take( Buffer ),
+    NewSink = process( Events, Buffer, Sink, DebugOpts ),
+    loop( Parent, Buffer, NewSink, DebugOpts )
+  end.
+
+%% @hidden
+%% @doc Perform the batch event processing by folding the Sink state over
+%%    each event in order.
+%% @end
+process( Events, Buffer, Sink, _Debug ) ->
+  lists:foldl( fun(Event, SinkRef) ->
+                  %TODO: Do some debuggery here if needed.
+                  to_sink(libemp_sink:process( Event, Buffer, SinkRef ))
+               end, Sink, Events ).
+
+%% @hidden
+%% @doc Get the sink from the libemp_sink:process/3 return value.
+to_sink( {next,_,Sink} ) -> Sink;
+to_sink( {drop,  Sink} ) -> Sink.

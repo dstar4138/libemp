@@ -11,3 +11,12 @@ which can be used in your own Work-Flows. Since Sinks contain the majority of
 your business logic we leave their implementation up to you and provide an
 extremely simple API and user interface.
 
+## Example Sinks:
+
+We provide a couple Sinks which are easy to use and
+
+
+#### Counter
+
+In event processing systems, the quantity of events can sometimes be
+overwhelming. A

@@ -1,5 +1,6 @@
-% Public Types
--include("libemp.hrl").
+% Private Types
+-type libemp_event() :: term().
+-type libemp_processor() :: pid() | atom().
 
 % Debug Types
 %%% Asserting and validation of running code, only use temporarily. %%%
