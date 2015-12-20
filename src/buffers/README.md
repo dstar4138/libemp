@@ -13,7 +13,7 @@ on potential workloads.
 Some things to consider when picking a buffer implementation (note we do not 
 provide a buffer for every edge case, you may need to roll your own).
 
-* How many Monitors/Sinks are you running? (i.e. # of concurrent producers & 
+* How many Monitors/Sinks are you running? (i.e. # of concurrent producers &
   consumers.)
 
 * What is your expected burst and steady throughput from your particular 

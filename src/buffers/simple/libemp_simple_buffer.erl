@@ -99,7 +99,7 @@ out(Q,all)->
 out(Q,1) ->
     case queue:out(Q) of
         {{value,V},NQ} -> {[V],NQ};
-        empty -> {[],Q}
+        {empty,Q}      -> {[],Q}
     end;
 out(Q,N) ->
     {Top,Rest} = lists:split(N, queue:to_list(Q)),

@@ -204,7 +204,10 @@ start( Name, Mod, BufferInstanceArgs ) ->
     end.
 
 %% @private
-%% @doc Ask the buffer initializer to generate a new buffer instance. 
+%% @doc Ask the buffer initializer to generate a new buffer instance. Otherwise
+%%    if a buffer name is specified, get the initializer from the node and then
+%%    register.
+%% @end
 -spec register( take | give, libemp_buffer_init() ) ->
             {ok, libemp_buffer()} | {error, Reason :: term()}.
 register( AsTakeOrGive, 
@@ -218,7 +221,12 @@ register( AsTakeOrGive,
             {error, Reason};
         {error, _} = Err -> 
             Err
-    end.
+    end;
+register( AsTakeOrGive, BufferName ) when is_atom( BufferName ) ->
+  case libemp_node:get_buffer( BufferName ) of
+    {ok, BufferInit}  -> libemp_buffer:register( AsTakeOrGive, BufferInit );
+    {error,_Reason}=E -> E
+  end.
 
 %%% ------------------------------
 %%% Behaviour Object Call-throughs
