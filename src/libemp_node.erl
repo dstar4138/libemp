@@ -75,11 +75,11 @@ remove_buffer( ID ) ->
 %%   provided it will return an error.
 %% @end
 -spec get_buffer( ID :: term() ) -> {ok, libemp_buffer:libemp_buffer_init()} |
-                                    {error, badarg}.
+                                    {error, {badarg, term()}}.
 get_buffer() -> get_buffer( ets:first( ?LIBEMP_NODE_BUFFERS ) ).
 get_buffer( ID ) -> 
     case ets:select( ?LIBEMP_NODE_BUFFERS, ID ) of
-       []    -> {error, badarg};
+       []    -> {error, {badarg, ID}};
        [Buf] -> {ok, Buf}
     end. 
 

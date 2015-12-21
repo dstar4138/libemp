@@ -37,9 +37,9 @@
 -spec start_link( atom(), atom(), [term()] ) ->
                       {ok, pid()} | ignore | {error, term()}.
 start_link( BufferName, SinkModule, SinkConfigs ) ->
-  gen:start( ?MODULE, link, ?NO_CALLBACK, [], [
-    BufferName, SinkModule, SinkConfigs
-  ] ).
+  gen:start( ?MODULE, link, ?NO_CALLBACK, [
+      BufferName, SinkModule, SinkConfigs
+    ], [] ).
 
 %% @doc Push a set of events to the processor to work on. This should be done
 %%   only for debugging or by the Buffer implementation itself if push
@@ -88,7 +88,7 @@ init_it( Starter, Parent, _, _, Args, Options ) ->
 %% @end
 terminate( Reason, BufferRef, SinkRef, _Debug ) ->
   libemp_buffer:unregister( BufferRef ),
-  libemp_sink:stop( Reason, SinkRef ),
+  libemp_sink:destroy( Reason, SinkRef ),
   exit( Reason ).
 
 %%%===================================================================
@@ -99,7 +99,7 @@ terminate( Reason, BufferRef, SinkRef, _Debug ) ->
 %% @doc Initialize the state by pulling from application configuration.
 init_state([ BufferName, SinkModule, SinkConfigs ]) ->
   {ok, BufferRef} = libemp_buffer:register( take, BufferName ),
-  case libemp_sink:start( SinkModule, SinkConfigs ) of
+  case libemp_sink:setup( SinkModule, SinkConfigs ) of
     {ok, SinkRef} -> {ok, BufferRef, SinkRef};
     Err ->
       libemp_buffer:unregister( BufferRef ),
