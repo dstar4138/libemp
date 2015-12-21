@@ -81,6 +81,7 @@ append_context( Event, Context ) ->
 %% @doc Setup the state for the contextualizing counter sink.
 build_context_state( _Args ) ->
     %TODO: Get the context's arguments, for now return default contexter.
+    %   i.e turn on and off the default contextualizers and get user provided.
     {ok, #context{}}. 
 
 %% @hidden
@@ -112,6 +113,7 @@ build_context_for_event( Type, CurState ) ->
 contextualizers() -> [
   fun c_context_type/2,
   fun c_serialized_count/2,
+  fun c_timestamp/2,
 
   %% User provided should always go last, to provide override ability.
   fun c_user_provided/2
@@ -131,6 +133,12 @@ c_serialized_count(Type, State=#context{counters=Map}) ->
   Context = #{count => CurCount},
   NewState = State#context{counters=NewMap},
   {Context, NewState}.
+
+%% @hidden
+%% @doc Get the current timestamp in a non-blocking fashion.
+c_timestamp( _,  State ) ->
+  Context = #{localts => erlang:system_time()},
+  {Context, State}.
 
 %% @hidden
 %% @doc Loop over the user provided contextualizers and allow them to generate
