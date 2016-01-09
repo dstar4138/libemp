@@ -144,9 +144,14 @@ c_timestamp( _,  State ) ->
 %% @doc Loop over the user provided contextualizers and allow them to generate
 %%    context for the provided event type.
 %% @end
-c_user_provided( Type, #context{contexters=Funs}) ->
-  lists:foldl(fun({Contexter,State}, {Context, PrevFuns}) ->
-    {MoreContext,NewState} = Contexter(Type,State),
-    {maps:merge(MoreContext,Context), [{Contexter,NewState}|PrevFuns]}
-    end, {maps:new(), []}, Funs).
+c_user_provided( Type, #context{contexters=Funs}=State) ->
+  {Context,NewFuns} = lists:foldl(
+                        fun({Contexter,State}, {Context, PrevFuns}) ->
+                              {MoreContext,NewState} =
+                                libemp_util:wrap_extern(Contexter,[Type,State]),
+                              NewContext = maps:merge(MoreContext,Context),
+                              NewPrevFuns = [{Contexter,NewState}|PrevFuns],
+                              {NewContext, NewPrevFuns}
+                        end, {maps:new(), []}, Funs),
+  {Context, State#context{contexters=lists:reverse(NewFuns)}}.
 

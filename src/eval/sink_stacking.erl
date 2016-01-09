@@ -2,6 +2,7 @@
 
 %% API
 -export([run/0,run/1,run_timed/0]).
+-export([infinite_run/0]).
 
 -define(EVENT, {mytestevent, "Hello World"}).
 -define(STACK(Sinks),[{stack,Sinks}]).
@@ -22,6 +23,21 @@ stack() ->
     {libemp_logger_sink,[]} % Show that any context within the substack is lost.
   ])),
   Stack.
+
+%% Creates a stack like: [ context, log, repush ]
+%% Which has the effect of adding the (note this method will complete but the
+%% Sink stack will forever be reprocessing an event.
+infinite_run() ->
+  {ok, _Ref, Buffer} = libemp_buffer:start(libemp_simple_buffer),
+  _Res = libemp_processor:start_link( Buffer, libemp_stack_sink, ?STACK([
+      {libemp_context_sink, []},
+      {libemp_logger_sink, []},
+      {libemp_repush_sink, []}
+    ])
+  ),
+  {ok, Giver} = libemp_buffer:register( give, Buffer ),
+  libemp_buffer:give(?EVENT, Giver).
+
 
 %%  which can run in sequence or in parallel:
 %%    the substacks can be thrown into other threads to finish parsing while

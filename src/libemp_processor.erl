@@ -24,7 +24,7 @@
 -export([push/2]).
 
 %% Private 'gen' API.
--export([init_it/6, terminate/4]).
+-export([init_it/6, terminate/5]).
 
 -include("internal.hrl").
 -define(NO_CALLBACK, 'no callback module').
@@ -70,9 +70,9 @@ init_it( Starter, Parent, _, _, Args, Options ) ->
   case
       catch init_state( Args )
   of
-    {ok, Buff, Sink} ->
+    {ok, TakeBuff, GiveBuff, Sink} ->
       proc_lib:init_ack( Starter, {ok, self()} ),
-      loop( Parent, Buff, Sink, Debug );
+      loop( Parent, TakeBuff, GiveBuff, Sink, Debug );
 
     {'EXIT', Reason} ->
       proc_lib:init_ack( Starter, {error, Reason} ),
@@ -86,8 +86,9 @@ init_it( Starter, Parent, _, _, Args, Options ) ->
 %% @doc Terminate the pull server. This also has the effect of shutting down the
 %%    embedded Sink and unregistering from the buffer.
 %% @end
-terminate( Reason, BufferRef, SinkRef, _Debug ) ->
-  libemp_buffer:unregister( BufferRef ),
+terminate( Reason, TakeBufferRef, GiveBufferRef, SinkRef, _Debug ) ->
+  libemp_buffer:unregister( TakeBufferRef ),
+  libemp_buffer:unregister( GiveBufferRef ),
   libemp_sink:destroy( Reason, SinkRef ),
   exit( Reason ).
 
@@ -98,11 +99,14 @@ terminate( Reason, BufferRef, SinkRef, _Debug ) ->
 %% @hidden
 %% @doc Initialize the state by pulling from application configuration.
 init_state([ BufferName, SinkModule, SinkConfigs ]) ->
-  {ok, BufferRef} = libemp_buffer:register( take, BufferName ),
+  {ok, BufferTakeRef} = libemp_buffer:register( take, BufferName ),
+  {ok, BufferGiveRef} = libemp_buffer:register( give, BufferName ),
   case libemp_sink:setup( SinkModule, SinkConfigs ) of
-    {ok, SinkRef} -> {ok, BufferRef, SinkRef};
+    {ok, SinkRef} ->
+      {ok, BufferTakeRef, BufferGiveRef, SinkRef};
     Err ->
-      libemp_buffer:unregister( BufferRef ),
+      libemp_buffer:unregister( BufferTakeRef ),
+      libemp_buffer:unregister( BufferGiveRef ),
       Err
   end.
 
@@ -110,18 +114,18 @@ init_state([ BufferName, SinkModule, SinkConfigs ]) ->
 %% @doc Run the processing loop. Listen for events being pushed or pull the
 %%   next batch from the Buffer.
 %% @end
-loop( Parent, Buffer, Sink, DebugOpts ) ->
+loop( Parent, TakeBuffer, GiveBuffer, Sink, DebugOpts ) ->
   receive
     {events, Events} ->
-        NewSink = process( Events, Buffer, Sink, DebugOpts ),
-        loop( Parent, Buffer, NewSink, DebugOpts );
+        NewSink = process( Events, GiveBuffer, Sink, DebugOpts ),
+        loop( Parent, TakeBuffer, GiveBuffer, NewSink, DebugOpts );
 
-    shutdown -> terminate( shutdown, Buffer, Sink, DebugOpts );
+    shutdown -> terminate( shutdown, TakeBuffer, GiveBuffer, Sink, DebugOpts );
     Unknown  -> ?ERROR("Unknown Message to libemp_processor: ~p~n",[Unknown])
   after 0 ->
-    Events = libemp_buffer:take( Buffer ),
-    NewSink = process( Events, Buffer, Sink, DebugOpts ),
-    loop( Parent, Buffer, NewSink, DebugOpts )
+    Events = libemp_buffer:take( TakeBuffer ),
+    NewSink = process( Events, GiveBuffer, Sink, DebugOpts ),
+    loop( Parent, TakeBuffer, GiveBuffer, NewSink, DebugOpts )
   end.
 
 %% @hidden
