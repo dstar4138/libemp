@@ -2,6 +2,17 @@
 -type libemp_event() :: term().
 -type libemp_processor() :: pid() | atom().
 
+-type monitor_config() :: term().
+-record(monitorref, {
+  name   :: string(),
+  module :: atom(),
+  config :: [ monitor_config() ],
+  args   :: [ term() ],
+  buffer :: libemp_buffer:libemp_buffer(),
+  pid    :: pid(),
+  linked :: pid()
+}).
+
 % Debug Types
 %%% Asserting and validation of running code, only use temporarily. %%%
 -ifdef(DEBUG).

@@ -1,4 +1,4 @@
-# LibeEMP Event Monitors
+# LibEMP Event Monitors
 
 LibEMP Event Monitors represent two things:
 
@@ -12,8 +12,15 @@ LibEMP Event Monitors represent two things:
 
 This means event monitors are services in their own right, but who's primary
 goal is to facilitate communication to-and-from outside of the LibEMP Node.
-As a *Sympathetic Agent*, the Monitor is an Actor which interacts with the world
-as the local hand for the resident Node.
+We call this style of Actor a *Sympathetic Agent*, in that the Monitor is an
+Actor which interacts with the world as the local hand for the resident Node.
+Its state is tied intrinsically to the local state.
+
+LibEMP avoids conflict of interest by letting the developer decide how
+sympathetic the Monitor becomes, insofar as the Monitor can either go down with
+the ship or keep itself distant. In either case, a goal of the Monitor API is to
+force this decision to be made (which keeps both the local and downstream
+services safe from unrecorded changes).
 
 ## Monitor Implementation Layout
 

@@ -14,6 +14,7 @@
 -export([save_buffer/2,save_buffer/3]).
 -export([remove_buffer/1]).
 -export([get_buffer/0,get_buffer/1]).
+-export([save_monitor/2]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -82,6 +83,10 @@ get_buffer( ID ) ->
        []    -> {error, {badarg, ID}};
        [Buf] -> {ok, Buf}
     end. 
+
+%% @doc Save the Monitor configuration and platform ref for de-initialization.
+save_monitor( Name, PlatformRef ) ->
+  ?LOG("NOT IMPLEMENTED, MONITOR_SAVE( ~p, ~p )~n.",[Name,PlatformRef]).
 
 %%% ===================================================================
 %%% API
