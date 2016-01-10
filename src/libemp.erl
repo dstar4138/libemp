@@ -13,6 +13,8 @@
   is_clustered_node/0
 ]).
 
+-define(APP, ?MODULE).
+
 %%% =======================================================================
 %%% Public API
 %%% =======================================================================
@@ -32,7 +34,7 @@ is_clustered_node()  -> false. %TODO: check with buffers to see if 1 is remote.
 %% @doc Check if the LibEMP application is running already.
 -spec is_node_running() -> boolean().
 is_node_running() ->
-    lists:keymember( ?MODULE, 1, applications:which_applications() ).
+    lists:keymember( ?APP, 1, applications:which_applications() ).
 
 %% @doc Validates that LibEMP is up and running with the given config. If not
 %%   it will inject the new application into the running service. Namely, 
@@ -45,17 +47,17 @@ ensure_started( Config ) ->
             true  -> inject( Config );
             false -> start( Config )
          end,
-    application:ensure_started( ?MODULE ).
+    application:ensure_started( ?APP ).
 
 %% @doc Start up the LibEMP application given a particular set of configs.
 -spec start( [term()] ) -> ok | {error, term()}.
-start( [] ) -> application:start( ?MODULE );
+start( [] ) -> application:start( ?APP );
 start( Config ) ->
-    application:load( ?MODULE ),            % Ensure libemp libraries loaded,
-    case parse_validate( Config ) of        % Parse given config to App wiring,
+    application:load( ?APP ),          % Ensure libemp libraries loaded,
+    case parse_validate( Config ) of   % Parse given config to App wiring,
         {ok, Wiring} ->
             load_wiring_to_appconfig( Wiring ), % Load into App Config,
-            application:start( ?MODULE );   % Start up libemp app with config.
+            application:start( ?APP ); % Start up libemp app with config.
         Error -> Error
     end.
 
@@ -64,7 +66,7 @@ start( Config ) ->
 stop() ->
     % TODO: Should we itteratively close Monitors, Sinks then Buffers?
     % TODO: Do we need to push the buffer to disk?
-    application:stop( ?MODULE ).
+    application:stop( ?APP ).
 
 %%%===================================================================
 %%% Internal functions
@@ -121,7 +123,7 @@ load_wiring_to_appconfig( Wiring ) ->
     add_to_env( sinks,      libemp_wiring:get_sinks( Wiring ) ),
     add_to_env( stacks,     libemp_wiring:get_stacks( Wiring ) ),
     add_to_env( fault_funs, libemp_wiring:get_fault_funs( Wiring ) ).
-add_to_env( Par, Val ) -> application:set_env( ?MODULE, Par, Val ).
+add_to_env( Par, Val ) -> application:set_env( ?APP, Par, Val ).
 
 %% @hidden
 %% @doc Opposite of loading the wiring into appconfig, this pulls out what
@@ -134,11 +136,11 @@ get_wiring_from_appconfig() ->
     {ok,Stacks}   = get_from_env( stacks, [] ),
     {ok,FaultFuns}= get_from_env( fault_funs, #{} ),
     libemp_wire:new_env( Buffers, Monitors, Sinks, Stacks, FaultFuns ).
-get_from_env( Par, Default ) -> application:get_env( ?MODULE, Par, Default ).
+get_from_env( Par, Default ) -> application:get_env( ?APP, Par, Default ).
 
 %% @hidden
 %% @doc Get the length of the config list for one of our environment parameters.
-check_env( Par ) -> get_length( application:get_env( ?MODULE, Par ) ).
+check_env( Par ) -> get_length( application:get_env( ?APP, Par ) ).
 get_length( Map ) when is_map(Map) -> maps:size( Map );
 get_length( List ) when is_list(List) -> length( List ).
 
