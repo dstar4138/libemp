@@ -17,6 +17,10 @@ This simple buffer only has one possible override:
         indicate that we should be as optimistic as possible and grab as many
         events off the buffer as possible.
 
+* `{buffer_take_hang, false | true}` - Tell the buffer to either hang until it
+        can successfully take at least one, or else it will return immediately
+        with an empty list. By default it will hang.
+
 ## Example Usage:
 
 Create a simple buffer:
