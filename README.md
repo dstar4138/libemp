@@ -46,7 +46,7 @@ stacked onto one another to easily extend their usefulness.
 
 To learn by example, LibEMP bundles a number of Sinks which are general enough
 to fit into your application, please see the
-[Bundled Sinks](https://github.com/dstar4138/libemp/tree/master/src/sinks).
+[Bundled Sinks](https://github.com/dstar4138/libemp/tree/develop/src/sinks).
 
 ### Buffers ###
 
@@ -68,7 +68,7 @@ computationally intensive event processing.
 
 To learn more about the Buffers currently in development and the trade offs 
 they make, please see the 
-[Bundled Buffers](https://github.com/dstar4138/libemp/tree/master/src/buffers).
+[Bundled Buffers](https://github.com/dstar4138/libemp/tree/develop/src/buffers).
 
 ### Monitors ###
 
@@ -87,4 +87,4 @@ example, when a Github 'fork' event happens on a set of particular repositories,
 have the Sink automatically put a 'watch' on it.
 
 To learn more about the Monitors currently in development, please see the
-[Bundled Monitors](https://github.com/dstar4138/libemp/tree/master/src/monitors).
+[Bundled Monitors](https://github.com/dstar4138/libemp/tree/develop/src/monitors).
