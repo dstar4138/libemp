@@ -1,7 +1,7 @@
 -module(hand_wired).
 
 %% API
--export([run/0,wired_processor/0, trigger_multiple_events/2]).
+-export([run/0,wired_processor/0,end2end/0,trigger_multiple_events/2]).
 
 %% Start up a buffer and processor, and then send events through the buffer
 %% to watch the logger sink trigger.
@@ -17,6 +17,12 @@ wired_processor() ->
   {ok, _Ref, Buffer} = libemp_buffer:start(libemp_simple_buffer),
   Res = libemp_processor:start_link( Buffer, libemp_logger_sink, []),
   {ok, Buffer, Res}.
+
+%% @doc Link up a logger sink to the timer monitor via a simple buffer.
+end2end() ->
+  {ok, Buffer, Res} = wired_processor(),
+  {ok, Pid} = libemp_monitor:start( libemp_timer_monitor, [], Buffer ),
+  {ok, Pid, Buffer, Res}.
 
 %% @hidden
 %% @doc Given Buffer object, send N events through it.
