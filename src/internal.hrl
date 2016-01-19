@@ -9,7 +9,7 @@
   config :: [ monitor_config() ],
   args   :: [ term() ],
   buffer :: libemp_buffer:libemp_buffer(),
-  pid    :: pid(),
+  pid    :: atom() | pid(), % Can be a name or pid reference.
   linked :: pid()
 }).
 

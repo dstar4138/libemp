@@ -11,10 +11,10 @@
 %%%   Stack Sink, and have that worry about whether it. That way you can have
 %%%   serialization with as much parallelism as your system implicitly allows.
 %%%
-%%%   Note: The Procesor does not follow standard `gen_server' behaviour,
+%%%   Note: The Processor does not follow standard `gen_server' behaviour,
 %%%   instead it uses the stdlib `gen' module to standardize its looping.
 %%%   See `gen_event' as this was modeled after that (except instead of being
-%%%   a 'push' based event loop, it is a 'pull' one). This is uses to compensate
+%%%   a 'push' based event loop, it is a 'pull' one). This is used to compensate
 %%%   for any deviation from the Buffer functionality.
 %%%
 -module(libemp_processor).
@@ -43,7 +43,7 @@ start_link( BufferName, SinkModule, SinkConfigs ) ->
 
 %% @doc Push a set of events to the processor to work on. This should be done
 %%   only for debugging or by the Buffer implementation itself if push
-%%   processing is neccessary. If the processor is already working on a set of
+%%   processing is necessary. If the processor is already working on a set of
 %%   events, these will be effectively appended to the end. If the Processor
 %%   is blocked on a buffer's implementation of a `take' this will NOT BYPASS,
 %%   instead it will wait until the take completes and then append to the
@@ -84,7 +84,7 @@ init_it( Starter, Parent, _, _, Args, Options ) ->
 
 %% @private
 %% @doc Terminate the pull server. This also has the effect of shutting down the
-%%    embedded Sink and unregistering from the buffer.
+%%    embedded Sink and unregistering it from the buffer.
 %% @end
 terminate( Reason, TakeBufferRef, GiveBufferRef, SinkRef, _Debug ) ->
   libemp_buffer:unregister( TakeBufferRef ),

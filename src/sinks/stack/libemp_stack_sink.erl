@@ -2,13 +2,13 @@
 %%%
 %%%     A Stack of Sinks which can run an event through a list of Sinks
 %%%     according to a retry/failure logic setting. Each Sink is wrapped
-%%%     with a callback which can either trigger a retry, propogate an
+%%%     with a callback which can either trigger a retry, propagate an
 %%%     updated event processing failure, or break the sink stack
 %%%     evaluation.
 %%%
 %%%     It is implemented using the Sink behaviour so as to abstract the
 %%%     wiring functionality away from the core of LibEMP. While this is
-%%%     a privlaged form of sinks, this can be ignored and the developer
+%%%     a privileged form of sinks, this can be ignored and the developer
 %%%     can use raw sinks with processors. Additionally with this
 %%%     abstraction, one can have stacks of stacks. With this
 %%%     functionality a stack will always allow for the next stack to
@@ -49,7 +49,7 @@ destroy( Reason, #stack_state{stack = Stack} ) ->
 validate_configs( Args ) ->
   {StackConfigs, HandlerFun} = parse_configs( Args ),
   case validate_handler_fun( HandlerFun ) of
-    ok  -> validate_stack_configs( StackConfigs );
+    true  -> validate_stack_configs( StackConfigs );
     Err -> Err
   end.
 
@@ -137,23 +137,6 @@ validate_stack_configs( [ SinkConnection | Rest ] ) ->
 
 %% @hidden
 %% @doc Check that the configuration of a single sink is valid.
-check_sink_config( {SinkName, SinkFaultHandler} ) ->
-  case {
-    check_sink_config(SinkName),
-    validate_handler_fun(SinkFaultHandler)
-  } of
-    {{error,_}=Err,_} -> Err;
-    {_,{error,_}=Err} -> Err;
-    _Success -> ok
-  end;
-check_sink_config( SinkName ) when is_atom( SinkName ) ->
-  case libemp_util:get_cfgs( sinks ) of
-    [] -> {error, {badsink, SinkName}};
-    Map when is_map(Map) ->
-      (case maps:find(SinkName, Map) of
-         error -> {error,{badsink,SinkName}};
-         {ok,{Module,Configs}} ->
-           libemp_sink:validate_configs( Module, Configs )
-       end)
-  end.
+check_sink_config( {Module, Configs} ) ->
+  libemp_sink:validate_configs( Module, Configs ).
 

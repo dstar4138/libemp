@@ -31,6 +31,7 @@
 %% Export internal LibEMP Buffer API
 -export([start/1, start/2, start/3,
          start_link/3, validate_configs/3]).
+-export([get_id/1]).
 
 %% Export external LibEMP Buffer API
 -export([create/1,register/2,unregister/1,
@@ -227,6 +228,11 @@ register( AsTakeOrGive, BufferName ) when is_atom( BufferName ) ->
     {ok, BufferInit}  -> libemp_buffer:register( AsTakeOrGive, BufferInit );
     {error,_Reason}=E -> E
   end.
+
+%% @private
+%% @doc Returns the internal ID for the Buffer reference.
+get_id( #libemp_buffer_initializer{id=ID} ) -> ID;
+get_id( #libemp_buffer{ref=#libemp_buffer_initializer{id=ID}} ) -> ID.
 
 %%% ------------------------------
 %%% Behaviour Object Call-throughs

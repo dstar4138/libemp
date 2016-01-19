@@ -121,10 +121,7 @@ is_pure( _ ) -> false.
 %%    behaviour, and the Configs which should be validated by the Module.
 %% @end
 validate_configs( Module, Configs ) when is_atom( Module ) ->
-    case libemp_util:function_exists( fun Module:validate_configs/1, true ) of
-        false -> {error, {non_existing, Module}};
-        _ -> libemp_util:wrap_extern( Module, validate_configs, [Configs], ok )
-    end.
+    libemp_util:wrap_extern( Module, validate_configs, [Configs], ok ).
 
 %%% ==========================================================================
 %%% Internal Functionality

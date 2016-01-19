@@ -11,11 +11,10 @@ run() ->
   trigger_multiple_events(Buffer, 10),              % Send 10 events through it.
   Buffer.                                           % Return buffer to user.
 
-%% @hidden
 %% @doc Create a buffer, and wire it to a processor wrapping a logger sink.
 wired_processor() ->
-  {ok, _Ref, Buffer} = libemp_buffer:start(libemp_simple_buffer),
-  Res = libemp_processor:start_link( Buffer, libemp_logger_sink, []),
+  {ok, _Ref, Buffer} = libemp_buffer:start( libemp_simple_buffer ),
+  Res = libemp_processor:start_link( Buffer, libemp_logger_sink, [] ),
   {ok, Buffer, Res}.
 
 %% @doc Link up a logger sink to the timer monitor via a simple buffer.

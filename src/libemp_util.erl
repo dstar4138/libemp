@@ -64,7 +64,8 @@ function_exists( Fun ) -> function_exists( Fun, false ).
 %% @end
 function_exists( Fun, LoadIfNot ) ->
   case erlang:fun_info( Fun, type ) of
-    {type,internal} -> true; % Should be defined, the name is a refrence.
+    {type,local}    -> true;
+    {type,internal} -> true; % Should be defined, the name is a reference.
     {type,external} ->
       {M,F,A} = erlang:fun_info_mfa( Fun ),
       load_module_maybe(LoadIfNot, M),

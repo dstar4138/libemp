@@ -39,7 +39,7 @@ start_link() ->
 %%   will fail.
 %% @end
 add_buffer(Name, Module, Configs) ->
-  case libemp_buffer:validate_config( Name, Module, Configs ) of
+  case libemp_buffer:validate_configs( Name, Module, Configs ) of
     ok ->
       supervisor:start_child( ?MODULE, [Name,Module,Configs] );
     {error,_}=Error ->

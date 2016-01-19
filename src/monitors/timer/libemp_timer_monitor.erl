@@ -5,13 +5,12 @@
 -vsn({1,0,0}).
 
 %% LibEMP Monitor API
--export([ describe/1, setup/3, destroy/2 ]).
+-export([ describe/2, setup/3, destroy/2 ]).
 
 %% Private exports
 -export([loop/2]).
 
 %% LibEMP Monitor Definition.
--define(MONITOR_NAME, "cron").
 -define(MONITOR_CONFIG, []).
 
 %% Our event structure that we generate.
@@ -27,8 +26,8 @@
 %%   do not need to check the host to see if we are able to run as there are no
 %%   requirements.
 %% @end
-describe( _Args ) ->
-  {ok, ?MONITOR_NAME, ?MONITOR_CONFIG}.
+describe( _Name, _Args ) ->
+  {ok, ?MONITOR_CONFIG}.
 
 %% @doc Initialize our Monitor.
 setup( _Args, _Config, EMP ) ->
