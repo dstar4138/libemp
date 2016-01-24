@@ -20,7 +20,7 @@
 -module(libemp_processor).
 
 %% API
--export([start_link/3]).
+-export([start_link/3, stop/2]).
 -export([push/2]).
 
 %% Private 'gen' API.
@@ -53,6 +53,10 @@ start_link( BufferName, SinkModule, SinkConfigs ) ->
 push( Events, ProcessorRef ) ->
   ProcessorRef ! {events, Events},
   ok.
+
+%% @doc Stop the Processor and de-link it from its buffer.
+stop( Reason, Pid ) ->
+  Pid ! {shutdown,Reason}.
 
 %%%===================================================================
 %%% Private API
@@ -120,7 +124,8 @@ loop( Parent, TakeBuffer, GiveBuffer, Sink, DebugOpts ) ->
         NewSink = process( Events, GiveBuffer, Sink, DebugOpts ),
         loop( Parent, TakeBuffer, GiveBuffer, NewSink, DebugOpts );
 
-    shutdown -> terminate( shutdown, TakeBuffer, GiveBuffer, Sink, DebugOpts );
+    {shutdown,Reason} ->
+      terminate( Reason, TakeBuffer, GiveBuffer, Sink, DebugOpts );
     Unknown  -> ?ERROR("Unknown Message to libemp_processor: ~p~n",[Unknown])
   after 0 ->
     Events = libemp_buffer:take( TakeBuffer ),

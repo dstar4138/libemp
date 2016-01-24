@@ -147,9 +147,7 @@ get_monitor( Name ) ->
 %%      libemp:stop/0,1
 %%      libemp:which_applications/0
 -define(LIBEMP_NODE_APPLICATIONS, libemp_node_applications).
--record(libemp_node_applications, {
-    name, app_def, bufrefs = [], monrefs = [], procrefs = []
-  }).
+-record(libemp_node_applications, {name, app_def, app_refs}).
 
 %% @doc Get a list of the Applications that have been loaded onto the local
 %%    LibEMP node.
@@ -181,28 +179,19 @@ stop_all_applications() ->
 stop_application( AppName ) ->
   % Unfold the application:
   [Refs] = ets:lookup( ?LIBEMP_NODE_APPLICATIONS, AppName ),
-  AppDef = Refs#libemp_node_applications.app_def,
-  uninstall_buffers( AppDef ),
-  uninstall_monitors( AppDef ),
-  uninstall_processors( AppDef ),
+  AppRefs = Refs#libemp_node_applications.app_refs,
+  libemp_app_exec:uninstall( normal, AppRefs ),
   gen_server:call( ?MODULE, {delete_application, AppName} ).
 
 %% @doc Inject the Application onto the local libemp_node.
 inject( AppName, AppDef ) ->
-  try
-    App = #libemp_node_applications {
-      name=AppName, app_def=AppDef,
-      bufrefs = install_buffers( AppDef ),
-      monrefs = install_monitors( AppDef ),
-      procrefs = install_processors( AppDef )
-    },
-    gen_server:call( ?MODULE, {save_application, App} )
-  catch Type:Reason -> % For any error, roll back installation.
-    uninstall_buffers( AppDef ),
-    uninstall_monitors( AppDef ),
-    uninstall_processors( AppDef ),
-    % Propagate that error up, but attach old stack trace.
-    Type( {Reason, erlang:get_stacktrace()} )
+  case libemp_app_exec:install( AppDef ) of
+    {ok, AppRefs} ->
+      App = #libemp_node_applications {
+        name=AppName, app_def=AppDef, app_refs=AppRefs
+      },
+      gen_server:call( ?MODULE, {save_application, App} );
+    Error -> Error
   end.
 
 %%% ===================================================================
@@ -328,47 +317,4 @@ destroy_tables( #state{ apptab=AT, buftab=BT, montab=MT } ) ->
     true = ets:delete(BT),
     true = ets:delete(MT).
 
-%% @hidden
-%% @doc Install the buffers the App defines.
-install_buffers( AppDef ) ->
-  InstallBuffer = fun( {Name,Module,Configs}, Refs ) ->
-    case get_buffer( Name ) of
-      {ok, _} -> {error, {buffer_already_exists, Name}};
-      _ -> create_buffer( Name, Module, Configs, Refs )
-    end
-  end,
-  libemp_app_def:foldl_buffers(InstallBuffer, [], AppDef).
-create_buffer( Name, Module, Configs, Refs ) ->
-  {ok, _Pid} = libemp_buffer_sup:add_buffer( Name, Module, Configs ),
-  {ok, Initializer} = get_buffer( Name ),
-  ID = libemp_buffer:get_id( Initializer ),
-  [ ID | Refs ].
 
-%% @hidden
-%% @doc Install and link the Monitors to the Buffers they are attached to.
-install_monitors( AppDef ) ->
-  InstallMonitor = fun( {Name,Module,Configs,BufRef}, Refs ) ->
-    case get_monitor( Name ) of
-      {ok, _, _} -> {error, {monitor_already_exists, Name}};
-      _ -> create_monitor( Name, Module, Configs, BufRef, Refs )
-    end
-  end,
-  libemp_app_def:foldl_monitor( InstallMonitor, [], AppDef ).
-create_monitor( Name, Module, Configs, BufRef, Refs ) ->
-  {ok, Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),
-  [ Pid | Refs ].
-
-%% @hidden
-%% @doc Install and link the Processors to the Buffers they are attached to.
-install_processors( AppDef ) ->
-  InstallProcessor = fun( {BufRef, SinkModule, SinkConfigs}, Refs ) ->
-    create_processor( BufRef, SinkModule, SinkConfigs, Refs )
-  end,
-  libemp_app_def:foldl_processors( InstallProcessor, [], AppDef ).
-create_processor( BufRef, Module, Configs, Refs ) ->
-  {ok, Pid} = libemp_processor_sup:add_processor( BufRef, Module, Configs ),
-  [ Pid | Refs ].
-
-uninstall_buffers( AppDef ) -> ok.
-uninstall_monitors( AppDef ) -> ok.
-uninstall_processors( AppDef ) -> ok.

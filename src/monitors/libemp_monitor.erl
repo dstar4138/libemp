@@ -15,7 +15,7 @@
 -include("../internal.hrl").
 
 -export([start_link/3, start_link/4, start/4]).
--export([stop/1]).
+-export([stop/1,stop/2]).
 
 -opaque platform_reference() :: #monitorref{}.
 -export_type([platform_reference/0]).

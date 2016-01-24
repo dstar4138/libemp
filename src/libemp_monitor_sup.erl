@@ -5,8 +5,10 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
--export([add_monitor/4]).
+-export([
+  start_link/0,
+  add_monitor/4, remove_monitor/2
+]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -22,6 +24,11 @@ start_link() ->
 %% @doc Adds a monitor to the supervisor and starts it up.
 add_monitor(Name, Module, MonitorArgs, LinkedBufferName) ->
   supervisor:start_child( ?MODULE, [Name,Module,MonitorArgs,LinkedBufferName]).
+
+%% @doc Requires the Process ID to stop the child.
+remove_monitor( Reason, Pid ) ->
+  libemp_monitor:stop( Reason, Pid ),
+  supervisor:terminate_child( ?MODULE, Pid ).
 
 %%%===================================================================
 %%% Supervisor callbacks

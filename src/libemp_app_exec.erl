@@ -1,0 +1,129 @@
+%%% LibEMP Application Execution -
+%%%
+%%%   This Module implements the functionality required for injection new
+%%%   applications onto a running LibEMP node. This is slightly complicated
+%%%   due to the desire to have installation be transactional (i.e. if it
+%%%   fails, it gets rolled back).
+%%%
+-module(libemp_app_exec).
+
+%% API
+-export([
+  install/1,
+  uninstall/2
+]).
+
+
+install( AppDef ) ->
+  Init = #{def=>AppDef, bufs=>[], mons=>[], procs=>[]},
+  Funs = [
+    {bufs,  fun install_buffers/1,    fun uninstall_buffers/2   },
+    {procs, fun install_processors/1, fun uninstall_processors/2},
+    {mons,  fun install_monitors/1,   fun uninstall_monitors/2  }
+  ],
+  NullRollback = fun(_RollbackReason) -> ok end,
+  transaction(Funs, Init, NullRollback).
+
+uninstall( Reason, #{bufs:=BufferRefs, procs:=ProcRefs, mons:=MonitorRefs} ) ->
+  uninstall_monitors( Reason, MonitorRefs ),
+  uninstall_processors( Reason, ProcRefs ),
+  uninstall_buffers( Reason, BufferRefs ).
+
+
+
+%% @hidden
+%% @doc The functionality for a transaction. Namely, on a failure we rollback
+%%   all state we have accumulated. Otherwise we update our state and recurse
+%%   until we reach the end of the function stream.
+%% @end
+transaction( [], State, _ ) -> {ok, State};
+transaction( [{ID,Fun,UnFun}|Rest], State, Rollback ) ->
+  case Fun( State ) of
+    {error, Reason, Refs} ->
+      RollbackReason = {shutdown,Reason},
+      UnFun(RollbackReason, Refs),
+      Rollback(RollbackReason),
+      {error, Reason};
+    {ok, Refs} ->
+      NewState = State#{ID => Refs},
+      NewRollback = fun(R) -> UnFun(R, Refs), Rollback(R) end,
+      transaction(Rest, NewState, NewRollback)
+  end.
+
+%% @hidden
+%% @doc Install the buffers the App defines.
+install_buffers( #{def:=AppDef} ) ->
+  InstallBuffer = fun( {Name,Module,Configs}, Refs ) ->
+    case libemp_node:get_buffer( Name ) of
+      {ok, _} -> {error, {buffer_already_exists, Name}, Refs};
+      _ -> create_buffer( Name, Module, Configs, Refs )
+    end
+  end,
+  libemp_app_def:foldl_buffers(InstallBuffer, [], AppDef).
+create_buffer( Name, Module, Configs, Refs ) ->
+  try
+    {ok, Pid} = libemp_buffer_sup:add_buffer( Name, Module, Configs ),
+    {ok, Initializer} = libemp_node:get_buffer( Name ),
+    [ {Name,Pid,Initializer} | Refs ]
+  catch _:Reason ->
+    {error, Reason, Refs}
+  end.
+
+%% @hidden
+%% @doc Uninstall the buffers that the App defines.
+uninstall_buffers( _Reason, [] ) -> ok;
+uninstall_buffers( Reason, [{default,_,_}|Others] ) ->
+  uninstall_buffers( Reason, Others ); % Skip default buffer, don't shut it down
+uninstall_buffers( Reason, [{_,Pid,Initializer}|Others] ) ->
+  catch libemp_buffer_sup:remove_buffer( Reason, Pid, Initializer ),
+  uninstall_buffers( Reason, Others ).
+
+%% @hidden
+%% @doc Install and link the Monitors to the Buffers they are attached to.
+install_monitors( #{def:=AppDef} ) ->
+  InstallMonitor = fun( {Name,Module,Configs,BufRef}, Refs ) ->
+    case libemp_node:get_monitor( Name ) of
+      {ok, _, _} -> {error, {monitor_already_exists, Name}, Refs};
+      _ -> create_monitor( Name, Module, Configs, BufRef, Refs )
+    end
+  end,
+  libemp_app_def:foldl_monitor( InstallMonitor, [], AppDef ).
+create_monitor( Name, Module, Configs, BufRef, Refs ) ->
+  try
+    {ok, _Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),
+    [ Name | Refs ]
+  catch _:Reason ->
+    {error, Reason, Refs}
+  end.
+
+%% @hidden
+%% @doc For each monitor reference, shut it down with the given reason.
+uninstall_monitors( Reason, MonitorRefs ) ->
+  lists:foreach( fun(Name) ->
+                    catch libemp_monitor_sup:remove_monitor(Reason, Name)
+                 end,
+                 MonitorRefs ).
+
+
+%% @hidden
+%% @doc Install and link the Processors to the Buffers they are attached to.
+install_processors( #{def:=AppDef} ) ->
+  InstallProcessor = fun( {BufRef, SinkModule, SinkConfigs}, Refs ) ->
+    create_processor( BufRef, SinkModule, SinkConfigs, Refs )
+  end,
+  libemp_app_def:foldl_processors( InstallProcessor, [], AppDef ).
+create_processor( BufRef, Module, Configs, Refs ) ->
+  try
+    {ok, Pid} = libemp_processor_sup:add_processor( BufRef, Module, Configs ),
+    [ Pid | Refs ]
+  catch _:Reason ->
+    {error, Reason, Refs}
+  end.
+
+%% @hidden
+%% @doc For each Processor reference, shut it down with the given reason.
+uninstall_processors( Reason, ProcRefs ) ->
+  lists:foreach( fun(Pid) ->
+                    catch libemp_processor_sup:remove_processor( Reason, Pid )
+                 end,
+                 ProcRefs ).

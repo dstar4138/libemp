@@ -41,6 +41,7 @@ escaping_foldl( _Fun, Acc, [] )   -> {ok, Acc};
 escaping_foldl( Fun, Acc, [H|T] ) ->
     case catch Fun(H,Acc) of
         {'EXIT',Reason} -> {error,Reason};
+        {error,_,_}=Err -> Err; % Extended error case.
         {error,_}=Error -> Error;
         {ok,NAcc}       -> escaping_foldl( Fun, NAcc, T );
         NAcc            -> escaping_foldl( Fun, NAcc, T )

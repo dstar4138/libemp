@@ -5,7 +5,7 @@
 -vsn({1,0,0}).
 
 %% LibEMP Monitor API
--export([ describe/2, setup/3, destroy/2 ]).
+-export([ describe/2, setup/3, destroy/3 ]).
 
 %% Private exports
 -export([loop/2]).
@@ -35,7 +35,7 @@ setup( _Args, _Config, EMP ) ->
   {ok,Pid}.
 
 %% @doc Shutdown our Monitor by killing the timer.
-destroy( _Reason, Pid ) ->
+destroy( _Reason, Pid, _EMP ) ->
   Pid ! shutdown.
 
 %%% ==========================================================================

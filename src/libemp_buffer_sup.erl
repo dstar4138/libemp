@@ -10,7 +10,10 @@
 -include("internal.hrl").
 
 %% API
--export([start_link/0, add_buffer/3]).
+-export([
+  start_link/0,
+  add_buffer/3, remove_buffer/3
+]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -46,6 +49,11 @@ add_buffer(Name, Module, Configs) ->
       Error
   end.
 
+%% @doc Terminate the buffer behind the Initializer with the given PID.
+remove_buffer( _Reason, Pid, Initializer ) ->
+  libemp_buffer:destroy( Initializer ),
+  supervisor:terminate_child(?MODULE, Pid).
+
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================
@@ -55,7 +63,6 @@ add_buffer(Name, Module, Configs) ->
 %%   any default configuration provided as well.
 %% @end 
 init( _ ) ->
-  %TODO: Pull out shutdown setting from config. Along with intensity/period.
     SupFlags = #{strategy => simple_one_for_one,
                  intensity => 0,
                  period => 1},
