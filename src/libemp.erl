@@ -97,7 +97,7 @@ validate_modules_exist( AppDef ) ->
   libemp_app_def:foldl_monitor(
     fun( {_,Module,_,_}, _ ) -> module_exists(Module) end, ok, AppDef ),
   libemp_app_def:foldl_processors(
-    fun( {_,Module,_}, _ ) -> module_exists(Module) end, ok, AppDef ).
+    fun( {_,Module,_,_}, _ ) -> module_exists(Module) end, ok, AppDef ).
 
 module_exists( Module ) ->
   case code:ensure_loaded( Module ) of

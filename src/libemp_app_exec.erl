@@ -13,7 +13,7 @@
   uninstall/2
 ]).
 
-
+%% @doc Transactional installation of the LibEMP Application.
 install( AppDef ) ->
   Init = #{def=>AppDef, bufs=>[], mons=>[], procs=>[]},
   Funs = [
@@ -24,12 +24,15 @@ install( AppDef ) ->
   NullRollback = fun(_RollbackReason) -> ok end,
   transaction(Funs, Init, NullRollback).
 
+%% @doc Install the Application from LibEMP.
 uninstall( Reason, #{bufs:=BufferRefs, procs:=ProcRefs, mons:=MonitorRefs} ) ->
   uninstall_monitors( Reason, MonitorRefs ),
   uninstall_processors( Reason, ProcRefs ),
   uninstall_buffers( Reason, BufferRefs ).
 
-
+%%% =======================================================================
+%%% Internal Functionality
+%%% =======================================================================
 
 %% @hidden
 %% @doc The functionality for a transaction. Namely, on a failure we rollback
@@ -108,12 +111,12 @@ uninstall_monitors( Reason, MonitorRefs ) ->
 %% @hidden
 %% @doc Install and link the Processors to the Buffers they are attached to.
 install_processors( #{def:=AppDef} ) ->
-  InstallProcessor = fun( {BufRef, SinkModule, SinkConfigs}, Refs ) ->
-    create_processor( BufRef, SinkModule, SinkConfigs, Refs )
+  InstallProcessor = fun( {BufRef, SinkModule, SinkConfigs, Handler}, Refs ) ->
+    create_processor( BufRef, SinkModule, SinkConfigs, Handler, Refs )
   end,
   libemp_app_def:foldl_processors( InstallProcessor, [], AppDef ).
-create_processor( BufRef, Module, Configs, Refs ) ->
-  try
+create_processor( BufRef, Module, Configs, _Handler, Refs ) ->
+  try %%FIXME: if BufRef==default, we may need to inject the stack onto existing processors
     {ok, Pid} = libemp_processor_sup:add_processor( BufRef, Module, Configs ),
     [ Pid | Refs ]
   catch _:Reason ->

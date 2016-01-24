@@ -70,7 +70,7 @@ add_buffer( Name, Module, Configs, #{buffers := Buffs} = App ) ->
                                StackConfigs.
 add_stack( BufferName, DefaultHandler, StackConfigs, #{procs:=Procs}=App ) ->
   {SinkModule,SinkConfigs} = parse_stack( DefaultHandler, StackConfigs ),
-  NewProcs = [ {BufferName, SinkModule, SinkConfigs} | Procs ],
+  NewProcs = [ {BufferName, SinkModule, SinkConfigs, DefaultHandler} | Procs ],
   App#{procs => NewProcs}.
 
 %% @doc Same as the `add_stack/4' but uses the default Buffer.
@@ -135,7 +135,8 @@ foldl_monitor( Fun, Init, #{monitors := Monitors} ) ->
 -spec foldl_processors( fun((ProcessorItem,App)->App), App, app_def() ) -> App
           when ProcessorItem :: { BufRef :: term(),
                                   Module :: module(),
-                                  Configs :: [term()]
+                                  Configs :: [term()],
+                                  DefaultHandler :: fun()
                                 },
                App :: any().
 foldl_processors( Fun, Init, #{procs := Processors} ) ->
@@ -178,18 +179,19 @@ to_stack( Handler, SinkList ) ->
 %% @hidden
 %% @doc Validate the list of Monitors that they point to existing buffers.
 validate_monitors( Buffers, Monitors ) ->
-  validate_triples( Buffers, maps:values( Monitors ) ).
+  validate_tuples( Buffers, maps:values( Monitors ) ).
 
 %% @hidden
 %% @doc Validate the list of Processors that they point to existing buffers.
 validate_processors( Buffers, Procs ) ->
-  validate_triples( Buffers, Procs ).
+  validate_tuples( Buffers, Procs ).
 
 %% @hidden
-%% @doc Validates a list of triples where the first element is the buffer name.
-validate_triples( Buffers, List ) ->
+%% @doc Validates a list of tuples where the first element is the buffer name.
+validate_tuples( Buffers, List ) ->
   libemp_util:escaping_foldl(
-    fun({BufferName,_,_},ok) ->
+    fun(Tuple, ok) ->
+          BufferName = element( 1, Tuple ),
           case lists:member(BufferName, Buffers) of
             true  -> ok;
             false -> {error,{missing_buffer,BufferName}}
