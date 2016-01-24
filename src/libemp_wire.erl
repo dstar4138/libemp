@@ -12,7 +12,7 @@
 -module(libemp_wire).
 
 -export([ parse/1 ]).
--export_type([config_item/0, app_def/0]).
+-export_type([config_item/0]).
 
 %% Potential configuration item that can be found in a wiring file:
 -type config_item() ::
@@ -23,15 +23,6 @@
     {stack, [ term() | [ term() ] | {module(), [term()]} ], term(),
       libemp_stack:fault_handler()}.
 
-%% When the parse is complete we will have an Application definition.
--type app_def() :: #{
-  monitors => #{ term() => {module(), term()}},
-  buffer   => default | { term(), module(), [term()] },
-  stacks   => [
-    [ {module(),[term()]} ]
-  ]}.
--define(NEW_APP, #{monitors=>#{}, buffer=>default, stacks=>[]}).
-
 %%% =======================================================================
 %%% Public API
 %%% =======================================================================
@@ -39,9 +30,10 @@
 %% @doc Parse out the wiring configurations into an Application Definition.
 %%   This can be used to inject onto a LibEMP Node.
 %% @end
--spec parse( [config_item()] ) -> {ok, app_def()} | {error, any()}.
+-spec parse( [config_item()] ) -> {ok, libemp_app_def:app_def()}
+                                | {error, any()}.
 parse( Configs ) ->
-  parse( Configs, ?NEW_APP ).
+  parse( Configs, libemp_app_def:new() ).
 parse( Configs, App ) ->
   case pull_out_sinks( Configs ) of
     {ok, {Sinks, Definitions}} ->
@@ -88,25 +80,15 @@ m(Unknown, _, _) -> {error, {badarg,Unknown}}.
 %% @doc Abstract over the Application Buffer merge. This allows us to have a
 %%    consistent error mechanism.
 %% @end
-m_buffer( Name, Module, Configs, #{buffer := Buffer}=App ) ->
-  case Buffer of
-    default -> % Safe to override.
-      App#{buffer => {Name,Module,Configs}};
-    _ -> % Not safe to override. Only one buffer per 'app'.
-      {error, too_many_buffers}
-  end.
+m_buffer( Name, Module, Configs, App ) ->
+  libemp_app_def:add_buffer( Name, Module, Configs, App ).
 
 %% @hidden
 %% @doc Abstract over the Application Monitor merges. This allows us to have a
 %%    consistent error mechanism.
 %% @end
-m_monitor( Name, Module, Configs, #{monitors := Mons}=App ) ->
-  case maps:is_key(Name, Mons) of
-    true -> {error, {duplicate_monitor, Name}};
-    false ->
-      NewMons = Mons#{Name => {Module,Configs}},
-      App#{monitors => NewMons}
-  end.
+m_monitor( Name, Module, Configs, App ) ->
+  libemp_app_def:add_monitor( Name, Module, Configs, App ).
 
 %% @hidden
 %% @doc Abstract over the Application Stack merges. This allow us to have a
@@ -114,49 +96,39 @@ m_monitor( Name, Module, Configs, #{monitors := Mons}=App ) ->
 %% @end
 m_stack( [], _FaultHandler, _Sinks, _App) ->
   {error, empty_stack};
-m_stack( StackDef, FaultHandler, Sinks, #{stacks := Stacks}=App ) ->
-  case create_stack( StackDef, FaultHandler, Sinks ) of
-    {ok, Stack} ->
-      NewStacks = [Stack|Stacks],
-      App#{stacks=>NewStacks};
+m_stack( StackDef, FaultHandler, Sinks, App ) ->
+  case sink_substitution( StackDef, Sinks, [] ) of
+    {ok, Stack} -> libemp_app_def:add_stack( FaultHandler, Stack, App );
     Error -> Error
   end.
 
 %% @hidden
-%% @doc Create a stack based on the given Stack definition (and the Sink
-%%    definitions), and potentially a fault-handler function.
+%% @doc Loop through a stack config and replace all the Sink names with the
+%%   previously defined Sink configs.
 %% @end
-create_stack( StackDef, FaultHandler, Sinks ) ->
-  {ok, Stack} = loop_lookup( StackDef, Sinks, [] ),
-  {ok, [ {stack, Stack} | handler(FaultHandler) ]}.
-
-%% @hidden
-%% @doc Validate and pass in the fault function given via the
-handler(default) -> [];
-handler(Fun) when is_function( Fun ) -> [{fault_handler,Fun}].
-
-%% @hidden
-%% @doc For each Sink in a Stack Definition, if it just a reference, grab it
-%%    from the Sink definitions and replace it.
-%% @end
-loop_lookup( [], _, Stack ) -> {ok, lists:reverse(Stack)};
-loop_lookup( [ List | Rest ], Sinks, Stack ) when is_list( List ) ->
-  case loop_lookup( List, Sinks, [] ) of % Recurse, to allow for sub-stacks.
-    {ok, SubStack} ->
-      % Wrap sub-stacks as 'libemp_stack_sink' sinks.
-      NewStack = [{libemp_stack_sink, [{stack,SubStack}]}|Stack],
-      loop_lookup( Rest, Sinks, NewStack );
-    _ -> % Attempt to use "List" as a "Name" before conceding defeat.
-      (case maps:find(List, Sinks) of
-         {ok, Sink} -> loop_lookup(Rest, Sinks, [Sink|Stack]);
-         _ -> {error, {missing_sink, List}}
-       end)
-  end;
-loop_lookup( [{_,_}=Sink|Rest], Sinks, Stack ) ->
-  loop_lookup( Rest, Sinks, [Sink|Stack] );
-loop_lookup( [Name|Rest], Sinks, Stack ) ->
-  case maps:find(Name, Sinks) of
-    {ok, Sink} -> loop_lookup(Rest, Sinks, [Sink|Stack]);
-    _ -> {error, {missing_sink,Name}}
+sink_substitution( [], _, Stack ) -> {ok, lists:reverse(Stack)};
+sink_substitution( [ Item | Rest ], Sinks, Stack ) ->
+  case do_substitution( Item, Sinks ) of
+    {error,_}=Error -> Error;
+    SItem -> sink_substitution( Rest, Sinks, [SItem|Stack] )
   end.
+
+%% @hidden
+%% @doc Given an item's name or a list of items, look in the environment
+%%    dictionary and replace the values in place.
+%% @end
+do_substitution( List, Environment ) when is_list( List ) ->
+  case sink_substitution( List, Environment, [] ) of
+    {ok, ReplacedList} -> ReplacedList;
+    _ -> % Attempt to use the List as a string "Name" before conceding defeat.
+      do_item_lookup( List, Environment )
+  end;
+do_substitution( Item, Environment ) ->
+  do_item_lookup( Item, Environment ).
+do_item_lookup( Item, Environment ) ->
+  case maps:find( Item, Environment ) of
+    {ok, Definition} -> Definition;
+    _ -> {error, {missing_definition,Item}}
+  end.
+
 

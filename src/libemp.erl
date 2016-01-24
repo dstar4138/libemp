@@ -73,52 +73,32 @@ stop() ->
 %% @doc Stop just the application listed.
 -spec stop( AppName :: atom() ) -> ok | {error, term()}.
 stop( AppName ) ->
-  libemp_node:stop_application( AppName ),
-  application:stop( ?APP ).
+  libemp_node:stop_application( AppName ).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-validate_app( AppName, AppConfig ) ->
+validate_app( AppName, AppDef ) ->
   case lists:member( AppName, libemp:which_applications() ) of
     true -> {error, {alread_started, AppName}};
-    false -> validate_app_def( AppConfig )
+    false -> validate_app_def( AppDef )
   end.
-validate_app_def( #{monitors:=Monitors,buffer:=Buffer,stacks:=Stacks} ) ->
-    validate_monitors( Monitors ),
-    validate_buffer( Buffer ),
-    validate_stacks( Stacks ).
-validate_monitors( Monitors ) ->
-  Fun = fun( Name, {Module,_}, _ ) ->
-      case libemp_node:get_monitor( Name ) of
-        {ok,_,_} -> throw( {already_exists, Name} );
-        _ -> module_exists( Module )
-      end
-  end,
-  maps:fold( Fun, ok, Monitors ).
-validate_buffer( default ) -> ok; % always passes.
-validate_buffer( {Name, Module, _Configs} ) ->
-  case libemp_node:get_buffer( Name ) of
-    {ok,_} -> throw( {already_exists,Name} );
-    _ -> module_exists( Module )
+
+validate_app_def( AppDef ) ->
+  case libemp_app_def:validate_wiring( AppDef ) of
+    ok -> validate_modules_exist( AppDef );
+    Err -> Err
   end.
-validate_stacks( [] ) -> ok;
-validate_stacks( [V|R] ) ->
-  validate_stack( V ),
-  validate_stacks( R ).
-validate_stack( Val ) ->
-  case proplists:lookup( stack, Val ) of
-    {stack,S}-> validate_sinks( S );
-    _ -> throw({error, {no_stack_found, Val}})
-  end.
-validate_sinks( [] ) -> ok;
-validate_sinks( [{libemp_stack_sink,List}|Rest] ) when is_list( List ) ->
-  validate_stack( List ),
-  validate_sinks( Rest );
-validate_sinks( [{Module,_Config}|Rest] ) ->
-  module_exists( Module ),
-  validate_sinks( Rest ).
+
+validate_modules_exist( AppDef ) ->
+  libemp_app_def:foldl_buffers(
+    fun( {_,Module,_}, _ ) -> module_exists(Module) end, ok, AppDef ),
+  libemp_app_def:foldl_monitor(
+    fun( {_,Module,_,_}, _ ) -> module_exists(Module) end, ok, AppDef ),
+  libemp_app_def:foldl_processors(
+    fun( {_,Module,_}, _ ) -> module_exists(Module) end, ok, AppDef ).
+
 module_exists( Module ) ->
   case code:ensure_loaded( Module ) of
     {module, _} -> ok;

@@ -35,9 +35,17 @@
          terminate/2,
          code_change/3]).
 
+%% Table Default Options
+-define(DEFAULT_TABLE_OPS,[
+        ordered_set, % We will sort by ID (integer or named atoms).
+        protected,   % Synchronize writes through this process.
+        {read_concurrency, true}, % Favor reads (as this will be most common).
+        named_table  % Provided so that other processes may access without Ref.
+]).
+
 %% Local Node Server State:
 %%  Stores a reference to all of the local state tables in ETS.
--record(state, {apptab,buftab,montab}).
+-record(state, {apptab, buftab, montab}).
 
 %%% ------------------
 %%% Node State Tables
@@ -140,13 +148,19 @@ get_monitor( Name ) ->
 %%      libemp:which_applications/0
 -define(LIBEMP_NODE_APPLICATIONS, libemp_node_applications).
 -record(libemp_node_applications, {
-    name, app_def, bufref, monrefs = [], procrefs = []
+    name, app_def, bufrefs = [], monrefs = [], procrefs = []
   }).
 
+%% @doc Get a list of the Applications that have been loaded onto the local
+%%    LibEMP node.
+%% @end
 get_applications() ->
   ets:select( ?LIBEMP_NODE_APPLICATIONS,
               [ {#libemp_node_applications{name='$1', _='_'}, [], ['$1']} ] ).
 
+%% @doc Get the Application Definition for a specified Application loaded onto
+%%    the local LibEMP node.
+%% @end
 get_application( AppName ) ->
   case ets:lookup( ?LIBEMP_NODE_APPLICATIONS, AppName ) of
     [] -> {error,{badarg,AppName}};
@@ -155,25 +169,41 @@ get_application( AppName ) ->
       {ok, AppDef}
   end.
 
+%% @doc Safely stop all of the applications on the local node while leaving the
+%%   Node alive. This should put the local node back to a clean state.
+%% @end
 stop_all_applications() ->
   lists:foldl(fun(App,_) -> stop_application(App) end, ok, get_applications()).
 
+%% @doc Stop the LibEMP Application specified, this leaves all other
+%%    applications running.
+%% @end
 stop_application( AppName ) ->
   % Unfold the application:
-  [Refs] = ets:select( ?LIBEMP_NODE_APPLICATIONS, AppName ),
+  [Refs] = ets:lookup( ?LIBEMP_NODE_APPLICATIONS, AppName ),
   AppDef = Refs#libemp_node_applications.app_def,
-  uninstall_monitors( Refs, maps:get( monitors, AppDef, #{} ) ),
-  uninstall_stacks( Refs, maps:get(stacks, AppDef, []) ),
-  uninstall_buffer( Refs, maps:get(buffer, AppDef, default) ),
+  uninstall_buffers( AppDef ),
+  uninstall_monitors( AppDef ),
+  uninstall_processors( AppDef ),
   gen_server:call( ?MODULE, {delete_application, AppName} ).
 
 %% @doc Inject the Application onto the local libemp_node.
-inject( AppName, #{monitors:=Monitors,buffer:=Buffer,stacks:=Stacks}=AppDef ) ->
-  App  = #libemp_node_applications{name=AppName, app_def=AppDef},
-  BApp = install_buffer( Buffer, App ),
-  CApp = install_stacks( Stacks, BApp ),
-  DApp = install_monitors( Monitors, CApp ),
-  gen_server:call( ?MODULE, {save_application, DApp} ).
+inject( AppName, AppDef ) ->
+  try
+    App = #libemp_node_applications {
+      name=AppName, app_def=AppDef,
+      bufrefs = install_buffers( AppDef ),
+      monrefs = install_monitors( AppDef ),
+      procrefs = install_processors( AppDef )
+    },
+    gen_server:call( ?MODULE, {save_application, App} )
+  catch Type:Reason -> % For any error, roll back installation.
+    uninstall_buffers( AppDef ),
+    uninstall_monitors( AppDef ),
+    uninstall_processors( AppDef ),
+    % Propagate that error up, but attach old stack trace.
+    Type( {Reason, erlang:get_stacktrace()} )
+  end.
 
 %%% ===================================================================
 %%% API
@@ -239,19 +269,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 insert( Table, Row, State ) ->
-  case ets:insert(Table, Row) of
-    true ->
-      {reply, ok, State};
-    _ -> %TODO: Clean up error response
-      {reply, error, State}
-  end.
+  true = ets:insert(Table, Row),
+  {reply, ok, State}.
 delete( Table, ID, State ) ->
-  case ets:delete( Table, ID ) of
-    true ->
-      {reply, ok, State};
-    _ -> %TODO: Clean up error response
-      {reply, error, State}
-  end.
+  true = ets:delete( Table, ID ),
+  {reply, ok, State}.
 
 %% @hidden
 %% @doc Create the tables that we will be using by the rest of LibEMP.
@@ -282,34 +304,19 @@ build_tables() ->
 %% @hidden
 %% @doc Create the Applications table.
 build_applications_table() ->
-  Options = [
-      {keypos, #libemp_node_applications.name},
-      ordered_set, protected, {read_concurrency,true}, named_table
-  ],
+  Options = [ {keypos, #libemp_node_applications.name} | ?DEFAULT_TABLE_OPS ],
   ets:new( ?LIBEMP_NODE_APPLICATIONS, Options ).
 
 %% @hidden
 %% @doc Create the buffer table.
 build_buffers_table() ->
-    Options = [
-        {keypos, #libemp_node_buffers.id},
-        ordered_set, % We will sort by ID (integer or named atoms).
-        protected,   % Synchronize writes through this process.
-        {read_concurrency, true}, % Favor reads (as this will be most common).
-        named_table  % Provided so that other processes may access without Ref.
-    ],
+    Options = [ {keypos, #libemp_node_buffers.id} | ?DEFAULT_TABLE_OPS ],
     ets:new( ?LIBEMP_NODE_BUFFERS, Options ).
 
 %% @hidden
 %% @doc Create the Monitor reference table.
 build_monitors_table() ->
-    Options = [
-      {keypos, #libemp_node_monitors.name},
-      ordered_set,
-      protected,
-      {read_concurrency, true},
-      named_table
-    ],
+    Options = [ {keypos, #libemp_node_monitors.name} | ?DEFAULT_TABLE_OPS ],
     ets:new( ?LIBEMP_NODE_MONITORS, Options ).
 
 %% @hidden
@@ -321,60 +328,47 @@ destroy_tables( #state{ apptab=AT, buftab=BT, montab=MT } ) ->
     true = ets:delete(BT),
     true = ets:delete(MT).
 
-uninstall_monitors( Refs, Monitors ) -> ok.
-uninstall_stacks( Refs, Stacks ) -> ok.
-uninstall_buffer( Refs, Buffer ) -> ok.
-
 %% @hidden
-%% @doc In the case of the default buffer, verify that it is already running and
-%%    start it if not. Otherwise, launch the buffer that the Application
-%%    specifies. We then save the ID of the Buffer associated with this
-%%    Application in the AppRef (which is stored directly in ets).
-%% @end
-install_buffer( default, App ) ->
-  ID = case get_buffer() of
-        {error, _} -> create_default_buffer();
-        {ok, Initializer} -> libemp_buffer:get_id(Initializer)
-       end,
-  % mark as default! don't kill on uninstall
-  App#libemp_node_applications{bufref = {default,ID}};
-install_buffer( {Name, Module, Configs}, App ) ->
-  {ok, _Pid} = libemp_buffer_sup:add_buffer(Name, Module, Configs),
-  {ok, Initializer} = get_buffer(Name),
+%% @doc Install the buffers the App defines.
+install_buffers( AppDef ) ->
+  InstallBuffer = fun( {Name,Module,Configs}, Refs ) ->
+    case get_buffer( Name ) of
+      {ok, _} -> {error, {buffer_already_exists, Name}};
+      _ -> create_buffer( Name, Module, Configs, Refs )
+    end
+  end,
+  libemp_app_def:foldl_buffers(InstallBuffer, [], AppDef).
+create_buffer( Name, Module, Configs, Refs ) ->
+  {ok, _Pid} = libemp_buffer_sup:add_buffer( Name, Module, Configs ),
+  {ok, Initializer} = get_buffer( Name ),
   ID = libemp_buffer:get_id( Initializer ),
-  App#libemp_node_applications{bufref = ID}.
+  [ ID | Refs ].
 
 %% @hidden
-%% @doc For each Stack, we start a Processor and attach it to the Buffer.
-install_stacks( [], App ) -> App;
-install_stacks( [Stack|Stacks],
-                #libemp_node_applications{bufref=BufRef, procrefs=Refs}=App ) ->
-  ID = bufrefid( BufRef ),
-  {ok, Proc} = libemp_processor_sup:add_processor(ID, libemp_stack_sink, Stack),
-  NewApp = App#libemp_node_applications{procrefs = [Proc|Refs]},
-  install_stacks( Stacks, NewApp ).
+%% @doc Install and link the Monitors to the Buffers they are attached to.
+install_monitors( AppDef ) ->
+  InstallMonitor = fun( {Name,Module,Configs,BufRef}, Refs ) ->
+    case get_monitor( Name ) of
+      {ok, _, _} -> {error, {monitor_already_exists, Name}};
+      _ -> create_monitor( Name, Module, Configs, BufRef, Refs )
+    end
+  end,
+  libemp_app_def:foldl_monitor( InstallMonitor, [], AppDef ).
+create_monitor( Name, Module, Configs, BufRef, Refs ) ->
+  {ok, Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),
+  [ Pid | Refs ].
 
 %% @hidden
-%% @doc For each Monitor, we start it and link it to the Buffer.
-install_monitors( Monitors, #libemp_node_applications{bufref=BufRef} = App ) ->
-  ID = bufrefid(BufRef),
-  Fun = fun( Name, {Module,Configs}, Refs ) ->
-          {ok,Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,ID),
-          [Pid|Refs]
-        end,
-  Refs = maps:fold( Fun, [], Monitors ),
-  App#libemp_node_applications{monrefs = Refs}.
+%% @doc Install and link the Processors to the Buffers they are attached to.
+install_processors( AppDef ) ->
+  InstallProcessor = fun( {BufRef, SinkModule, SinkConfigs}, Refs ) ->
+    create_processor( BufRef, SinkModule, SinkConfigs, Refs )
+  end,
+  libemp_app_def:foldl_processors( InstallProcessor, [], AppDef ).
+create_processor( BufRef, Module, Configs, Refs ) ->
+  {ok, Pid} = libemp_processor_sup:add_processor( BufRef, Module, Configs ),
+  [ Pid | Refs ].
 
-%% @hidden
-%% @doc Create the default buffer and return a reference ID.
-create_default_buffer() -> %TODO: make default buffer of customizable type.
-  {ok, _Pid} = libemp_buffer_sup:add_buffer(default,libemp_simple_buffer,[]),
-  {ok, Initializer} = get_buffer(default),
-  libemp_buffer:get_id(Initializer).
-
-%% @hidden
-%% @doc the Buffer reference may be marked as default. Pull that away and grab
-%%   just the Buffer ID to acquire.
-%% @end
-bufrefid({default,ID}) -> ID;
-bufrefid(ID) -> ID.
+uninstall_buffers( AppDef ) -> ok.
+uninstall_monitors( AppDef ) -> ok.
+uninstall_processors( AppDef ) -> ok.

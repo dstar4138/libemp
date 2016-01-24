@@ -35,7 +35,8 @@ get_cfgs( Component ) when Component == buffers  orelse
 -spec escaping_foldl( Fun, Acc, [ term() ] ) -> Res 
                       when Acc :: term(),
                            Fun :: fun( (term(), Acc) -> Res ),
-                           Res :: {ok, term()} | {error, any()}.
+                           Res :: ok | {ok, term()} | {error, any()}.
+escaping_foldl( _Fun,  ok, [] )   -> ok;
 escaping_foldl( _Fun, Acc, [] )   -> {ok, Acc};
 escaping_foldl( Fun, Acc, [H|T] ) ->
     case catch Fun(H,Acc) of
