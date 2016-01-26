@@ -125,8 +125,8 @@ create_processor( BufRef, Module, Configs, _Handler, Refs ) ->
 
 %% @hidden
 %% @doc For each Processor reference, shut it down with the given reason.
-uninstall_processors( Reason, ProcRefs ) ->
+uninstall_processors( _Reason, ProcRefs ) ->
   lists:foreach( fun(Pid) ->
-                    catch libemp_processor_sup:remove_processor( Reason, Pid )
+                    catch libemp_processor_sup:remove_processor( Pid )
                  end,
                  ProcRefs ).

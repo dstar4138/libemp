@@ -20,6 +20,12 @@
 -export([get_monitor/1]).
 
 -export([
+  get_default_proc/1,
+  save_default_proc/2,
+  remove_default_proc/2
+]).
+
+-export([
   inject/2,
   get_application/1,
   get_applications/0,
@@ -45,11 +51,55 @@
 
 %% Local Node Server State:
 %%  Stores a reference to all of the local state tables in ETS.
--record(state, {apptab, buftab, montab}).
+-record(state, {apptab, buftab, montab, proctab}).
 
 %%% ------------------
 %%% Node State Tables
 %%% ------------------
+
+%% Node Default Processor References:
+%%  When a processor is created, we optionally save a reference to it if it is
+%%  the first one started for a given buffer. You interact with this table via
+%%  the libemp_processor module rather than via this module directly. See the
+%%  following:
+%%      libemp_processor:start_link/3
+%%      libemp_processor:stop/2
+-define(LIBEMP_NODE_PROCESSORS, libemp_node_processors).
+-record(libemp_node_processors, {id, pid, buffer_id}).
+
+%% @doc Save the processor to be the default for a given buffer reference, as
+%%    long as there wasn't one already saved.
+%% @end
+-spec save_default_proc( term(), pid() ) -> ok | {error, any()}.
+save_default_proc( Buffer, Pid ) ->
+  case get_default_proc( Buffer ) of
+    none -> % Do insert
+      Row = #libemp_node_processors {
+            id = erlang:make_ref(),
+            pid = Pid,
+            buffer_id = libemp_buffer:get_id( Buffer )
+      },
+      gen_server:call( ?MODULE, {save_proc, Row} );
+    _ -> ok
+  end.
+
+%% @doc Get the default processor for the given buffer.
+-spec get_default_proc( term() ) -> none | pid().
+get_default_proc( Buffer ) ->
+  ID = libemp_buffer:get_id( Buffer ),
+  Processor = ets:select(?LIBEMP_NODE_PROCESSORS,
+                         [{#libemp_node_processors{pid='$1', buffer_id=ID, _='_'},
+                              [], ['$1']}]),
+  case Processor of
+    [] -> none;
+    [Pid] -> Pid
+  end.
+
+%% @doc Remove the default processor for the given Buffer.
+-spec remove_default_proc( term(), pid() ) -> ok | {error, any()}.
+remove_default_proc( Buffer, Pid ) ->
+  BufferId = libemp_buffer:get_id( Buffer ),
+  gen_server:call(?MODULE, {delete_proc, BufferId, Pid}).
 
 %% Node Buffer Initializers:
 %%  When a buffer is created, we save a registration mechanism in the table
@@ -229,6 +279,10 @@ handle_call({save_application,#libemp_node_applications{}=R},_From,#state{apptab
     insert(AT,R,S);
 handle_call({delete_application,AppName},_From,#state{apptab=AT}=S) ->
     delete(AT,AppName,S);
+handle_call({save_proc,#libemp_node_processors{}=R},_From,#state{proctab=PT}=S) ->
+    insert(PT,R,S);
+handle_call({delete_proc,BID,_Pid},_From,#state{proctab=PT}=S) ->
+    delete(PT,BID,S);
 handle_call(Request, From, State) ->
     ?ERROR("Bad Request to Node Server from (~p): ~p~n",[From,Request]),
     {reply, {error, badreq}, State}.
@@ -271,7 +325,8 @@ build_tables() ->
         {
             build_applications_table(),
             build_buffers_table(),
-            build_monitors_table()
+            build_monitors_table(),
+            build_processor_table()
         } 
     of
         {'EXIT',Reason} -> 
@@ -281,12 +336,14 @@ build_tables() ->
         {
          AppsTable,
          BufTable,
-         MonitorTable
+         MonitorTable,
+         ProcessorTable
         } -> 
             #state{ 
                 apptab=AppsTable,
                 buftab=BufTable,
-                montab=MonitorTable
+                montab=MonitorTable,
+                proctab=ProcessorTable
             }
     end.
 
@@ -309,12 +366,19 @@ build_monitors_table() ->
     ets:new( ?LIBEMP_NODE_MONITORS, Options ).
 
 %% @hidden
+%% @doc Create the Processor reference table.
+build_processor_table() ->
+  Options = [ {keypos, #libemp_node_processors.buffer_id} | ?DEFAULT_TABLE_OPS ],
+  ets:new( ?LIBEMP_NODE_PROCESSORS, Options ).
+
+%% @hidden
 %% @doc Delete all state tables on shutdown, this will not clean up the 
 %%   Buffer or wiring state of the system, just the registration system.
 %% @end
-destroy_tables( #state{ apptab=AT, buftab=BT, montab=MT } ) ->
+destroy_tables( #state{ apptab=AT, buftab=BT, montab=MT, proctab=PT } ) ->
     true = ets:delete(AT),
     true = ets:delete(BT),
-    true = ets:delete(MT).
+    true = ets:delete(MT),
+    true = ets:delete(PT).
 
 

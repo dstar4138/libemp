@@ -13,7 +13,7 @@
 %% API
 -export([
   start_link/0,
-  add_processor/3, remove_processor/2
+  add_processor/3, remove_processor/1
 ]).
 
 %% Supervisor callbacks
@@ -55,8 +55,7 @@ add_processor( BufferName, SinkModule, SinkConfig ) ->
     end.
 
 %% @doc Remove the Processor at the given PID due to the given Reason.
-remove_processor( Reason, Pid ) ->
-  libemp_processor:stop( Reason, Pid ),
+remove_processor( Pid ) ->
   supervisor:terminate_child( ?MODULE, Pid ).
 
 

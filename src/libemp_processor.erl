@@ -11,35 +11,44 @@
 %%%   Stack Sink, and have that worry about whether it. That way you can have
 %%%   serialization with as much parallelism as your system implicitly allows.
 %%%
-%%%   Note: The Processor does not follow standard `gen_server' behaviour,
-%%%   instead it uses the stdlib `gen' module to standardize its looping.
-%%%   See `gen_event' as this was modeled after that (except instead of being
-%%%   a 'push' based event loop, it is a 'pull' one). This is used to compensate
-%%%   for any deviation from the Buffer functionality.
-%%%
 -module(libemp_processor).
-
-%% API
--export([start_link/3, stop/2]).
--export([push/2]).
-
-%% Private 'gen' API.
--export([init_it/6, terminate/5]).
+-behaviour(gen_server).
 
 -include("internal.hrl").
--define(NO_CALLBACK, 'no callback module').
+
+%% API
+-export([start_link/3]).
+-export([push/2]).
+-export([stop/1,stop/2]).
+
+%% gen_server callbacks
+-export([init/1,
+  handle_call/3,
+  handle_cast/2,
+  handle_info/2,
+  terminate/2,
+  code_change/3]).
+
+%% Private API
+-export([taker_loop/2]).
+
+-define(SERVER, ?MODULE).
+
+-record(state, {
+  taker_pid, take_buf, give_buf, sink_ref
+}).
 
 %%%===================================================================
-%%% Internal API
+%%% API
 %%%===================================================================
 
 %% @doc Starts the processor server and links it to the buffer.
--spec start_link( atom(), atom(), [term()] ) ->
-                      {ok, pid()} | ignore | {error, term()}.
+-spec start_link( atom(), atom(), [term()]) ->
+  {ok, Pid :: pid()} | {error, Reason :: term()}.
 start_link( BufferName, SinkModule, SinkConfigs ) ->
-  gen:start( ?MODULE, link, ?NO_CALLBACK, [
-      BufferName, SinkModule, SinkConfigs
-    ], [] ).
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [
+    BufferName, SinkModule, SinkConfigs
+  ], []).
 
 %% @doc Push a set of events to the processor to work on. This should be done
 %%   only for debugging or by the Buffer implementation itself if push
@@ -51,97 +60,121 @@ start_link( BufferName, SinkModule, SinkConfigs ) ->
 %% @end
 -spec push( [ libemp_event() ], libemp_processor() ) -> ok.
 push( Events, ProcessorRef ) ->
-  ProcessorRef ! {events, Events},
-  ok.
+  gen_server:cast( ProcessorRef, {events, Events} ).
 
-%% @doc Stop the Processor and de-link it from its buffer.
-stop( Reason, Pid ) ->
-  Pid ! {shutdown,Reason}.
+stop( ProcessorRef ) ->
+  gen_server:stop( ProcessorRef ).
+stop( Reason, ProcessorRef ) ->
+  gen_server:stop( ProcessorRef, Reason, infinity ).
 
 %%%===================================================================
-%%% Private API
+%%% gen_server callbacks
 %%%===================================================================
 
 %% @private
-%% @doc Initialize the generic pull server. This will loop and pull for
-%%   events from a LibEMP Buffer by requesting
-%% @end
-init_it( Starter, self, Name, Mod, Args, Options ) ->
-  init_it( Starter, self(), Name, Mod, Args, Options );
-init_it( Starter, Parent, _, _, Args, Options ) ->
+%% @doc Initializes the server state.
+-spec(init(Args :: term()) ->
+  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term()} | ignore).
+init(Args) ->
   process_flag( trap_exit, true ),
-  Debug = gen:debug_options( Options ),
-  case
-      catch init_state( Args )
-  of
-    {ok, TakeBuff, GiveBuff, Sink} ->
-      proc_lib:init_ack( Starter, {ok, self()} ),
-      loop( Parent, TakeBuff, GiveBuff, Sink, Debug );
-
-    {'EXIT', Reason} ->
-      proc_lib:init_ack( Starter, {error, Reason} ),
-      exit(Reason);
-    Else ->
-      proc_lib:init_ack( Starter, {error, Else} ),
-      exit(Else)
-  end.
+  {ok, State} = init_state( Args ),
+  {ok, TakerPid} = start_taker( State ),
+  {ok, State#state{taker_pid = TakerPid}}.
 
 %% @private
-%% @doc Terminate the pull server. This also has the effect of shutting down the
-%%    embedded Sink and unregistering it from the buffer.
-%% @end
-terminate( Reason, TakeBufferRef, GiveBufferRef, SinkRef, _Debug ) ->
-  libemp_buffer:unregister( TakeBufferRef ),
-  libemp_buffer:unregister( GiveBufferRef ),
-  libemp_sink:destroy( Reason, SinkRef ),
-  exit( Reason ).
+%% @doc Handling call messages
+handle_call(_Request, _From, State) -> {reply, ok, State}.
+
+%% @private
+%% @doc Handling cast messages
+-spec handle_cast(Request :: term(), State :: #state{}) ->
+  {noreply, NewState :: #state{}} |
+  {noreply, NewState :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: #state{}}.
+handle_cast({events, Events}, State) ->
+  % Halt the Processor while it does its thing.
+  NewState = process( Events, State ),
+  ready_the_taker( NewState ),
+  {noreply, NewState}.
+
+%% @private
+%% @doc Handling all non call/cast messages
+-spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
+  {noreply, NewState :: #state{}} |
+  {noreply, NewState :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: #state{}}.
+%TODO: handle taker failures.
+handle_info(_Info, State) -> {noreply, State}.
+
+-spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
+    State :: #state{}) -> term().
+terminate( Reason, State ) -> do_terminate( Reason, State ).
+
+%% @private
+%% @doc Convert process state when code is changed
+-spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
+    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}).
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-%% @hidden
-%% @doc Initialize the state by pulling from application configuration.
 init_state([ BufferName, SinkModule, SinkConfigs ]) ->
   {ok, BufferTakeRef} = libemp_buffer:register( take, BufferName ),
   {ok, BufferGiveRef} = libemp_buffer:register( give, BufferName ),
   case libemp_sink:setup( SinkModule, SinkConfigs ) of
     {ok, SinkRef} ->
-      {ok, BufferTakeRef, BufferGiveRef, SinkRef};
+      libemp_node:save_default_proc( BufferTakeRef, self() ),
+      {ok, #state{
+        take_buf = BufferTakeRef,
+        give_buf = BufferGiveRef,
+        sink_ref = SinkRef
+      }};
     Err ->
       libemp_buffer:unregister( BufferTakeRef ),
       libemp_buffer:unregister( BufferGiveRef ),
       Err
   end.
 
-%% @hidden
-%% @doc Run the processing loop. Listen for events being pushed or pull the
-%%   next batch from the Buffer.
-%% @end
-loop( Parent, TakeBuffer, GiveBuffer, Sink, DebugOpts ) ->
+start_taker( State ) ->
+  Pid = spawn_link( ?MODULE, taker_loop, [self(), State#state.take_buf] ),
+  {ok, Pid}.
+taker_loop( Processor, Taker ) ->
+  Events = libemp_buffer:take( Taker ),
+  libemp_processor:push( Events, Processor ),
+  taker_wait_for_ready( Processor, Taker ).
+taker_wait_for_ready( Processor, Taker ) ->
   receive
-    {events, Events} ->
-        NewSink = process( Events, GiveBuffer, Sink, DebugOpts ),
-        loop( Parent, TakeBuffer, GiveBuffer, NewSink, DebugOpts );
-
-    {shutdown,Reason} ->
-      terminate( Reason, TakeBuffer, GiveBuffer, Sink, DebugOpts );
-    Unknown  -> ?ERROR("Unknown Message to libemp_processor: ~p~n",[Unknown])
-  after 0 ->
-    Events = libemp_buffer:take( TakeBuffer ),
-    NewSink = process( Events, GiveBuffer, Sink, DebugOpts ),
-    loop( Parent, TakeBuffer, GiveBuffer, NewSink, DebugOpts )
+    ready -> taker_loop( Processor, Taker );
+    Reason -> exit(Reason)
   end.
+ready_the_taker( #state{taker_pid = Taker} ) ->
+  Taker ! ready.
+brute_kill_taker( Taker ) ->
+  exit( Taker, shutdown ).
+
+do_terminate( Reason, #state{taker_pid = Taker} = State ) ->
+  brute_kill_taker( Taker ),
+  libemp_node:remove_default_proc( State#state.take_buf, self() ),
+  libemp_buffer:unregister( State#state.take_buf ),
+  libemp_buffer:unregister( State#state.give_buf ),
+  libemp_sink:destroy( Reason, State#state.sink_ref ),
+  ok.
 
 %% @hidden
 %% @doc Perform the batch event processing by folding the Sink state over
 %%    each event in order.
 %% @end
-process( Events, Buffer, Sink, _Debug ) ->
-  lists:foldl( fun(Event, SinkRef) ->
-                  %TODO: Do some debuggery here if needed.
-                  to_sink(libemp_sink:process( Event, Buffer, SinkRef ))
-               end, Sink, Events ).
+process( Events, State ) ->
+  Buffer = State#state.give_buf,
+  Sink = State#state.sink_ref,
+  NewSink = lists:foldl( fun(Event, SinkRef) ->
+    %TODO: Do some debuggery here if needed.
+    to_sink(libemp_sink:process( Event, Buffer, SinkRef ))
+  end, Sink, Events ),
+  State#state{sink_ref = NewSink}.
 
 %% @hidden
 %% @doc Get the sink from the libemp_sink:process/3 return value.
