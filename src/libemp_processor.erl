@@ -62,6 +62,11 @@ start_link( BufferName, SinkModule, SinkConfigs ) ->
 push( Events, ProcessorRef ) ->
   gen_server:cast( ProcessorRef, {events, Events} ).
 
+%% @private
+%% @doc These should not be called by hand. This will force a stop of the
+%%   processor, but if it is part of the supervision tree, it will get
+%%   restarted. Use libemp_processor_sup:remove_processor/1.
+%% @end
 stop( ProcessorRef ) ->
   gen_server:stop( ProcessorRef ).
 stop( Reason, ProcessorRef ) ->

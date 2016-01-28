@@ -71,9 +71,9 @@ init( _ ) ->
                  intensity => 0,
                  period => 1},
     ChildSpecs = [#{id => processor,
-                    restart => permanent,
-                    start => {libemp_processor, start_link, []},
-                    shutdown => brutal_kill}],
+                    restart => transient,
+                    start => {libemp_processor, start_link, []}
+    }],
     {ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================

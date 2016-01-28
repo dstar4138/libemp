@@ -29,6 +29,7 @@ start_link() ->
 %% @private
 %% @doc Initialize the libemp subsystem supervisor.
 init([]) ->
+    process_flag( trap_exit, true ),
     SupFlags = #{ strategy  => rest_for_one, 
                   intensity => 1,
                   period    => 5 
