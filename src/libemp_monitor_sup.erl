@@ -7,7 +7,7 @@
 %% API
 -export([
   start_link/0,
-  add_monitor/4, remove_monitor/2
+  add_monitor/4, remove_monitor/1
 ]).
 
 %% Supervisor callbacks
@@ -25,10 +25,17 @@ start_link() ->
 add_monitor(Name, Module, MonitorArgs, LinkedBufferName) ->
   supervisor:start_child( ?MODULE, [Name,Module,MonitorArgs,LinkedBufferName]).
 
-%% @doc Requires the Process ID to stop the child.
-remove_monitor( Reason, Pid ) ->
-  libemp_monitor:stop( Reason, Pid ),
-  supervisor:terminate_child( ?MODULE, Pid ).
+%% @doc Requires the Process ID to stop the child, but will safely tell the
+%%   Monitor to destroy itself by contacting it's signal trapper.
+%% @end
+remove_monitor( Pid ) when is_pid( Pid ) ->
+  supervisor:terminate_child( ?MODULE, Pid );
+remove_monitor( Name ) ->
+  case libemp_node:get_monitor( Name ) of
+    {ok, Pid, _} ->
+      supervisor:terminate_child( ?MODULE, Pid );
+    Err -> Err
+  end.
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -43,8 +50,8 @@ init( _ ) ->
       period   => 5                   % 5 seconds before giving up.
     },
     ChildSpecs = [#{id=>monitor,
-                    restart => permanent,
-                    start => {libemp_monitor, start_link, []},
-                    shutdown => brutal_kill}],
+                    restart => transient,
+                    start => {libemp_monitor, start_link, []}
+    }],
     {ok, {SupFlags, ChildSpecs}}.
 

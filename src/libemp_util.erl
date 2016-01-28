@@ -9,6 +9,7 @@
 -export([get_cfgs/1]).
 -export([escaping_foldl/3]).
 -export([function_exists/1, function_exists/2]).
+-export([exit_to_error/1]).
 
 merge_default_args( Overrides, Args ) ->
     CleanOverrides = lists:keysort( 1, Overrides ),
@@ -78,3 +79,8 @@ function_exists( Fun, LoadIfNot ) ->
 %% @doc Maybe load the module based on a predicate result.
 load_module_maybe( false, _ ) -> ok;
 load_module_maybe( true, Module ) -> code:ensure_loaded( Module ).
+
+%% @doc Convert Exit codes to {error,Reason} objects for "safe" returns.
+exit_to_error( {'EXIT',_From, Reason} ) -> {error, Reason};
+exit_to_error( {'EXIT',Reason} ) -> {error, Reason};
+exit_to_error( Reason ) -> Reason.

@@ -67,9 +67,9 @@ init( _ ) ->
                  intensity => 0,
                  period => 1},
     ChildSpecs = [#{id => buffer,
-                    restart => permanent,
-                    start => {libemp_buffer, start_link, []},
-                    shutdown => brutal_kill}],
+                    restart => transient,
+                    start => {libemp_buffer, start_link, []}
+    }],
     {ok, {SupFlags, ChildSpecs}}.
 
 %%%===================================================================

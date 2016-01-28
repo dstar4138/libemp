@@ -58,11 +58,16 @@ transaction( [{ID,Fun,UnFun}|Rest], State, Rollback ) ->
 install_buffers( #{def:=AppDef} ) ->
   InstallBuffer = fun( {Name,Module,Configs}, Refs ) ->
     case libemp_node:get_buffer( Name ) of
-      {ok, _} -> {error, {buffer_already_exists, Name}, Refs};
+      {ok, _} -> get_or_error_buffer( Name, Refs );
       _ -> create_buffer( Name, Module, Configs, Refs )
     end
   end,
   libemp_app_def:foldl_buffers(InstallBuffer, [], AppDef).
+get_or_error_buffer( default, Refs ) ->
+  {ok, Initializer} = libemp_node:get_buffer(),
+  [{default, ignore, Initializer} | Refs];
+get_or_error_buffer( Name, Refs ) ->
+  {error, {buffer_already_exists, Name}, Refs}.
 create_buffer( Name, Module, Configs, Refs ) ->
   try
     {ok, Pid} = libemp_buffer_sup:add_buffer( Name, Module, Configs ),
@@ -93,17 +98,17 @@ install_monitors( #{def:=AppDef} ) ->
   libemp_app_def:foldl_monitor( InstallMonitor, [], AppDef ).
 create_monitor( Name, Module, Configs, BufRef, Refs ) ->
   try
-    {ok, _Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),
-    [ Name | Refs ]
+    {ok, Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),
+    [ Pid | Refs ]
   catch _:Reason ->
     {error, Reason, Refs}
   end.
 
 %% @hidden
 %% @doc For each monitor reference, shut it down with the given reason.
-uninstall_monitors( Reason, MonitorRefs ) ->
-  lists:foreach( fun(Name) ->
-                    catch libemp_monitor_sup:remove_monitor(Reason, Name)
+uninstall_monitors( _Reason, MonitorRefs ) ->
+  lists:foreach( fun( Pid ) ->
+                    catch libemp_monitor_sup:remove_monitor( Pid )
                  end,
                  MonitorRefs ).
 

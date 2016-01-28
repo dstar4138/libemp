@@ -15,7 +15,6 @@
 -include("../internal.hrl").
 
 -export([start_link/3, start_link/4, start/4]).
--export([stop/1,stop/2]).
 
 -opaque platform_reference() :: #monitorref{}.
 -export_type([platform_reference/0]).
@@ -83,21 +82,6 @@ start( MonitorName, Module, MonitorArgs, Buffer ) ->
        end)
   end.
 
-%% @doc Stop the Monitor given its Platform Reference or the Module/Name of the
-%%    Running Monitor.
-%% @end
-stop( Monitor ) -> stop( shutdown, Monitor ).
-
-%% @doc Stop the Monitor and override it's reason for shutting down.
-stop( Reason, #monitorref{module = Module, pid = Pid} = PR ) ->
-  libemp_monitor_api:unlink( PR ),
-  do_destroy(Module, Reason, Pid, PR);
-stop( Reason, ModuleOrName ) ->
-  case libemp_node:get_monitor( ModuleOrName ) of
-    {ok, _Pid, PR}  -> stop( Reason, PR );
-    Otherwise -> Otherwise
-  end.
-
 %%% ==========================================================================
 %%% Internal Functionality
 %%% ==========================================================================
@@ -112,11 +96,48 @@ load( Name, Module, Args, Config, Buffer ) ->
     {ok, PlatformReference} ->
       (case do_setup( Module, Args, Config, PlatformReference ) of
         {ok, Pid} ->
-          PR = PlatformReference#monitorref{pid=Pid,linked=self()},
-          libemp_node:save_monitor(Name, PR),
-          {ok, Pid};
-        Otherwise -> Otherwise
+          wrap( Pid, Name, Module, PlatformReference#monitorref{pid=Pid} );
+        Otherwise ->
+          Otherwise
       end)
+  end.
+
+%% @hidden
+%% @doc Wrap the LibEMP Monitor in a monitoring service so that we can catch
+%%    failures from the service and signals from LibEMP.
+%% @end
+wrap( Pid, Name, Module, PlatformReference ) ->
+  OnFailure = build_failure( Module, Pid, PlatformReference ),
+  Callbacks = #{
+    terminate => build_terminate( Module, Pid, PlatformReference ),
+    failure => OnFailure
+  },
+  case libemp_trapper:start_link( Pid, Callbacks ) of
+    {ok, MonPid} ->
+      % Override and return the wrapper's Pid instead so all signals go to it.
+      libemp_node:save_monitor(Name, PlatformReference#monitorref{pid=MonPid}),
+      {ok, MonPid};
+    Error ->
+      catch OnFailure( Error ),
+      Error
+  end.
+
+%% @hidden
+%% @doc Build the function called when someone requests the Monitor to shutdown.
+build_terminate( Module, Pid, PlatformReference ) ->
+  fun() ->
+    ?LOG("Terminate callback executed"),
+    libemp_node:remove_monitor( PlatformReference ),
+    do_destroy( Module, shutdown, Pid, PlatformReference )
+  end.
+
+%% @hidden
+%% @doc Build the function called when there is an error up/down stream.
+build_failure( Module, Pid, PlatformReference ) ->
+  fun( Reason ) ->
+    ?LOG("Failure callback executed: ~p~n",[Reason]),
+    libemp_node:remove_monitor( PlatformReference ),
+    do_destroy( Module, Reason, Pid, PlatformReference )
   end.
 
 %% @hidden
@@ -140,25 +161,23 @@ create_ref( Name, Module, Args, Config, Buffer ) ->
 %% @doc Wrap calls to the behaviour's implementation of `describe/1'.
 do_describe( MonitorName, Module, MonitorArgs ) ->
   Args = [ MonitorName, MonitorArgs ],
-  case (catch libemp_util:wrap_extern( Module, describe, Args )) of
-    {'EXIT',Reason} -> {error,Reason};
-    Otherwise       -> Otherwise
-  end.
+  Result = (catch libemp_util:wrap_extern( Module, describe, Args )),
+  ?LOG("Monitor(~p) Describe: ~p~n",[Module, Result]),
+  libemp_util:exit_to_error( Result ).
 
 %% @hidden
 %% @doc Wrap calls to the behaviour's implementation of `setup/3'.
 do_setup( Module, ModuleArgs, ModuleConfig, PlatformReference ) ->
   Args = [ ModuleArgs, ModuleConfig, PlatformReference ],
-  case (catch libemp_util:wrap_extern( Module, setup, Args )) of
-    {'EXIT', Reason} -> {error, Reason};
-    Otherwise        -> Otherwise
-  end.
+  Result = (catch libemp_util:wrap_extern( Module, setup, Args )),
+  ?LOG("Monitor(~p) Setup: ~p~n",[Module,Result]),
+  libemp_util:exit_to_error( Result ).
 
 %% @hidden
 %% @doc Wrap calls to the behaviour's implementation of `destroy/3'.
 do_destroy( Module, Reason, Pid, PlatformReference ) ->
   Args = [Reason, Pid, PlatformReference],
-  case (catch libemp_util:wrap_extern( Module, destroy, Args )) of
-    {'EXIT',Error} -> {error, Error};
-    Otherwise      -> Otherwise
-  end.
+  Result = (catch libemp_util:wrap_extern( Module, destroy, Args )),
+  ?LOG("Monitor(~p) Destroy: ~p~n",[Module, Result]),
+  libemp_util:exit_to_error( Result ).
+

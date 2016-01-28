@@ -273,7 +273,7 @@ handle_call({remove_buffer,ID},_From,#state{buftab=BT}=S)->
     delete(BT,ID,S);
 handle_call({save_monitor,#libemp_node_monitors{}=R},_From,#state{montab=MT}=S) ->
     insert(MT,R,S);
-handle_call({remove_monitor,Name},_From,#state{montab=MT}=S)->
+handle_call({delete_monitor,Name},_From,#state{montab=MT}=S)->
     delete(MT,Name,S);
 handle_call({save_application,#libemp_node_applications{}=R},_From,#state{apptab=AT}=S) ->
     insert(AT,R,S);
@@ -312,7 +312,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 insert( Table, Row, State ) ->
-  true = ets:insert(Table, Row),
+  true = ets:insert( Table, Row ),
   {reply, ok, State}.
 delete( Table, ID, State ) ->
   true = ets:delete( Table, ID ),
