@@ -129,12 +129,12 @@ validate_configs( Module, Configs ) when is_atom( Module ) ->
 
 %% @hidden
 %% @doc Run the setup callback and wrap the result in a sink object if
-%%  if neccessary.
+%%  if necessary.
 %% @end
 do_setup( Module, Args ) ->
-    case 
-        catch libemp_util:wrap_extern( Module, setup, [Args], ok )
-    of
+    Result = (catch libemp_util:wrap_extern( Module, setup, [Args], ok )),
+    ?LOG("Sink(~p) Setup: ~p~n",[Module, Result]),
+    case Result of
         ok -> 
             {ok, #libemp_sink{module=Module, state=[]}};
         {ok, State} -> 
@@ -146,16 +146,19 @@ do_setup( Module, Args ) ->
 %% @hidden
 %% @doc Run the destroy callback.
 do_destroy( Reason, Module, State ) ->
-    %TODO: General debuggery.
-    %catch
-     libemp_util:wrap_extern(Module, destroy, [Reason, State], ok).
+    Args = [Reason, State],
+    Result = (catch libemp_util:wrap_extern(Module, destroy, Args, ok)),
+    ?LOG("Sink(~p) Destroy: ~p~n",[Module, Result]),
+    Result.
+
 
 %% @hidden
 %% @doc Run the process callback given an event/buffer pair and the state
 %%   of the current module.
 %% @end 
 do_process( Event, Buffer, Module, State ) ->
-    %TODO: General debuggery.
-    %catch
-     libemp_util:wrap_extern( Module, process, [Event, Buffer, State] ).
+    Args = [Event, Buffer, State],
+    Result = (catch libemp_util:wrap_extern( Module, process, Args )),
+    ?LOG("Sink(~p) Process: ~p~n",[Module, Result]),
+    Result.
 

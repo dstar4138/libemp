@@ -126,7 +126,6 @@ wrap( Pid, Name, Module, PlatformReference ) ->
 %% @doc Build the function called when someone requests the Monitor to shutdown.
 build_terminate( Module, Pid, PlatformReference ) ->
   fun() ->
-    ?LOG("Terminate callback executed"),
     libemp_node:remove_monitor( PlatformReference ),
     do_destroy( Module, shutdown, Pid, PlatformReference )
   end.
@@ -135,7 +134,6 @@ build_terminate( Module, Pid, PlatformReference ) ->
 %% @doc Build the function called when there is an error up/down stream.
 build_failure( Module, Pid, PlatformReference ) ->
   fun( Reason ) ->
-    ?LOG("Failure callback executed: ~p~n",[Reason]),
     libemp_node:remove_monitor( PlatformReference ),
     do_destroy( Module, Reason, Pid, PlatformReference )
   end.
