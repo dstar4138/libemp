@@ -81,13 +81,7 @@ run_stack_item( Event, BufferRef, SItem, RetryCount ) ->
     {next, NE, NS} -> {next, NE, libemp_stack:item_set_sink(NS, SItem)};
     {drop, NS}     -> {drop, libemp_stack:item_set_sink(NS,SItem)};
 
-  % Ignore match errors (i.e. sink doesn't expect/care about that event).
-  % Examples:
-  %   X = fun(2) -> ok end, X(test).
-  %   Y = fun(Z) when is_integer(Z) -> ok end, Y(test).
-    {'EXIT', {function_clause, _}} -> {next, Event, SItem};
-
-  % Handle the other error cases.
+  % Handle the error cases.
     {'EXIT', Reason} ->
       handle_fault( Reason, RetryCount, Event, BufferRef, SItem )
   end.

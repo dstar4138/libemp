@@ -158,7 +158,16 @@ do_destroy( Reason, Module, State ) ->
 %% @end 
 do_process( Event, Buffer, Module, State ) ->
     Args = [Event, Buffer, State],
-    Result = (catch libemp_util:wrap_extern( Module, process, Args )),
-    ?LOG("Sink(~p) Process: ~p~n",[Module, Result]),
+    Result =
+        case (catch libemp_util:wrap_extern( Module, process, Args )) of
+  % Ignore match errors (i.e. sink doesn't expect/care about that event).
+  % Examples:
+  %   X = fun(2) -> ok end, X(test).
+  %   Y = fun(Z) when is_integer(Z) -> ok end, Y(test).
+            {'EXIT', {function_clause, _}} -> {next, Event, State};
+            {'EXIT', Reason} -> exit(Reason);
+            Val -> Val
+        end,
+    ?LOG("Sink(~p) Process(~p) => ~p~n",[Module, Event, Result]),
     Result.
 
