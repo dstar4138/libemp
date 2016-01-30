@@ -72,8 +72,9 @@ append_and_continue_pull_out( Name, Module, Configs, Rest, {S,D} ) ->
 %% @hidden
 %% @doc Merge in one of the definitions into the Application.
 m(_, _, {error, _}=Error) -> Error;
-m({stack,StackDef}, Sinks,         App) -> m_stack(StackDef,default,Sinks,App);
-m({stack,StackDef,FH}, Sinks,      App) -> m_stack(StackDef,FH,Sinks,App);
+m({stack,StackDef}, Sinks,         App) -> m_stack(StackDef,default,default,Sinks,App);
+m({stack,StackDef,Buf}, Sinks,     App) -> m_stack(StackDef,Buf,default,Sinks,App);
+m({stack,StackDef,Buf,FH}, Sinks,  App) -> m_stack(StackDef,Buf,FH,Sinks,App);
 m({buffer,Module,Configs}, _,      App) -> m_buffer(Module,Module,Configs,App);
 m({buffer,Name,Module,Configs}, _, App) -> m_buffer(Name,Module,Configs,App);
 m({monitor,Module,Configs}, _,     App) -> m_monitor(Module,Module,Configs,App);
@@ -98,11 +99,11 @@ m_monitor( Name, Module, Configs, App ) ->
 %% @doc Abstract over the Application Stack merges. This allow us to have a
 %%    consistent error mechanism.
 %% @end
-m_stack( [], _FaultHandler, _Sinks, _App) ->
+m_stack( [], _BufferName, _FaultHandler, _Sinks, _App) ->
   {error, empty_stack};
-m_stack( StackDef, FaultHandler, Sinks, App ) ->
+m_stack( StackDef, BufferName, FaultHandler, Sinks, App ) ->
   case sink_substitution( StackDef, Sinks, [] ) of
-    {ok, Stack} -> libemp_app_def:add_stack( FaultHandler, Stack, App );
+    {ok, Stack} -> libemp_app_def:add_stack( BufferName, FaultHandler, Stack, App );
     Error -> Error
   end.
 
