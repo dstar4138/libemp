@@ -16,7 +16,7 @@
 
 %% Potential configuration item that can be found in a wiring file:
 -type config_item() ::
-    {buffer | monitor, module(), [term()]} |
+    {buffer | monitor | sink, module(), [term()]} |
     {buffer | monitor | sink, term(), module(), [term()]} |
     {stack, [ term() | [ term() ] | {module(), [term()]} ]} |
     {stack, [ term() | [ term() ] | {module(), [term()]} ], term()} |
@@ -55,15 +55,19 @@ pull_out_sinks( Configs ) ->
   pull_out_sinks(Configs,{#{},[]}).
 pull_out_sinks( [], Refs ) ->
   {ok, Refs};
-pull_out_sinks( [{sink,Name,Module,Configs}|Rest], {S,D} ) ->
+pull_out_sinks( [{sink,Module,Configs}|Rest], State ) ->
+  append_and_continue_pull_out( Module, Module, Configs, Rest, State );
+pull_out_sinks( [{sink,Name,Module,Configs}|Rest], State ) ->
+  append_and_continue_pull_out( Name, Module, Configs, Rest, State );
+pull_out_sinks( [Def|Rest], {S,D} ) ->
+  pull_out_sinks( Rest, {S,[Def|D]} ).
+append_and_continue_pull_out( Name, Module, Configs, Rest, {S,D} ) ->
   case maps:is_key(Name,S) of
     true  -> {error, {duplicate_sink,Name}};
     false ->
       NS = S#{Name=>{Module,Configs}},
       pull_out_sinks( Rest, {NS,D} )
-  end;
-pull_out_sinks( [Def|Rest], {S,D} ) ->
-  pull_out_sinks( Rest, {S,[Def|D]} ).
+  end.
 
 %% @hidden
 %% @doc Merge in one of the definitions into the Application.
