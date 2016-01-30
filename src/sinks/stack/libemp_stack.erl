@@ -177,7 +177,7 @@ format( #libemp_sink_stack{stack = Stack} ) ->
 %% @doc Attempt to pretty print, by recursing on stacks.
 pprint(#libemp_stack_item{module = libemp_stack_sink, sink=Sink}, {Buffer,Indent}) ->
 {
-  [Buffer, lists:fold(pprint/2,{[],Indent+1}, libemp_stack_sink:get_stack(Sink)),"~n"],
+  [Buffer, lists:fold(fun pprint/2,{[],Indent+1}, libemp_stack_sink:get_stack(Sink)),"~n"],
  Indent
 };
 pprint(#libemp_stack_item{ module = Sink },{Buffer,Indent}) ->
