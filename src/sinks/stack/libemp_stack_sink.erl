@@ -85,7 +85,7 @@ build_stack( [Item|Rest], Stack, State ) ->
 
 %% @hidden
 %% @doc Start up the new sink, and add it to the stack based on return.
-startup( {SinkModName, Args}, Stack) ->
+startup( {SinkModName, Args}, Stack ) ->
   case libemp_sink:setup( SinkModName, Args ) of
     {ok, Sink} ->
       Handler = libemp_stack:get_handler( Stack ),
@@ -96,7 +96,7 @@ startup( {SinkModName, Args}, Stack) ->
 startup( {SinkModName, Args, FaultHandler}, Stack ) ->
   case libemp_sink:setup(SinkModName, Args) of
     {ok, Sink} ->
-      {ok, libemp_stack:prepend(SinkModName,Sink,FaultHandler,Stack)};
+      {ok, libemp_stack:append(SinkModName,Sink,FaultHandler,Stack)};
     ignore -> {ok, Stack};
     {stop, Reason} -> {error, Reason}
   end.
