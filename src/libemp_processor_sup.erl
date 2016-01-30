@@ -27,16 +27,8 @@
 %%   requested.
 %% @end
 start_link() ->
-    case
-        supervisor:start_link({local, ?MODULE}, ?MODULE, [])
-    of
-        ignore -> ignore;
-        {error,_}=E -> E;
-        {ok,_}=Res ->
-            % On success, initialize processors, and return Result.
-            initialize_processors(),
-            Res
-    end.
+  supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
 
 %% @doc Build and add a processor to the supervisor. It will immediately
 %%   begin pulling from the buffer after the sink starts up..
@@ -75,17 +67,4 @@ init( _ ) ->
                     start => {libemp_processor, start_link, []}
     }],
     {ok, {SupFlags, ChildSpecs}}.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-%% @hidden
-%% @doc Get the currently initialized buffer and link all of them processors
-%%   that we start up.
-%% @end 
-initialize_processors( ) ->
-    lists:foreach( fun({BufferName,SinkName,SinkConfig}) ->
-        add_processor(BufferName,SinkName,SinkConfig)
-    end, libemp_util:get_cfgs( sinks ) ).
 

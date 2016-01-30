@@ -27,15 +27,7 @@
 %%   LibEMP.
 %% @end
 start_link() ->
-    case
-        supervisor:start_link( {local, ?MODULE}, ?MODULE, [] )
-    of
-      ignore -> ignore;
-      {error,_}=E -> E;
-      {ok,_}=Ret ->
-        initialize_buffers(),
-        Ret
-    end.
+    supervisor:start_link( {local, ?MODULE}, ?MODULE, [] ).
 
 %% @doc Add a buffer to the supervisor, this will launch the buffer and
 %%   tag it as the given name. If the name already exists, this function
@@ -71,37 +63,4 @@ init( _ ) ->
                     start => {libemp_buffer, start_link, []}
     }],
     {ok, {SupFlags, ChildSpecs}}.
-
-%%%===================================================================
-%%% Buffer Setup
-%%%===================================================================
-
-%% @hidden
-%% @doc Get the list of buffers from the application config when the system
-%%   starts up, and trigger the supervisor to start a new buffer.
-%% @end
-initialize_buffers() ->
-  lists:foreach(fun({Name, BufferModule, Configs}) ->
-    add_buffer(Name,BufferModule,Configs)
-  end, get_buffers()).
-
-%% @hidden
-%% @doc Actually get the list of buffers from appconfig and turn it into an
-%%    easy list to process.
-%% @end
-get_buffers() ->
-  case libemp_util:get_cfgs(buffers) of
-    []  -> [];
-    Map when is_map( Map ) ->
-      % Wire stores buffers as #{ Name => {Module,Configs} }.
-      % We need it as [ {Name,Module,Configs} | ... ] for add_buffer.
-      lists:foldl(fun(Key, List) ->
-        {Module,Configs}=maps:get(Key, Map),
-        [{Key,Module,Configs}|List]
-        end,
-        [],
-        maps:keys(Map)
-      )
-  end.
-
 
