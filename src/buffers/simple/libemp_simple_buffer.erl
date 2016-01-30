@@ -25,8 +25,8 @@
 %%   platform.
 %% @end
 initialize( Args ) ->
-    {ok, Pid} = gen_server:start_link( {local, ?MODULE}, ?MODULE, Args, [] ),
-    {ok, Pid, ?MODULE}.
+    {ok, Pid} = gen_server:start_link( ?MODULE, Args, [] ),
+    {ok, Pid, Pid}.
 
 %% @doc Register either a taker or giver with the buffer PID, by just returning
 %%   the gen_server API for it.
