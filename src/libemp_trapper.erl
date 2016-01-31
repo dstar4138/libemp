@@ -31,7 +31,7 @@
 -spec start_link( pid(), #{ atom() => fun() } ) ->
   {ok, Pid :: pid()} | {error, Reason :: term()}.
 start_link( Pid, Callbacks ) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [
+  gen_server:start_link( ?MODULE, [
       Pid, Callbacks
   ], []).
 
