@@ -13,15 +13,23 @@
 
 -export([ parse/1 ]).
 -export_type([config_item/0]).
+-export_type([component_type/0, component_name/0]).
+-export_type([module_config/0, stack_config/0]).
 
-%% Potential configuration item that can be found in a wiring file:
+-type component_type() :: buffer | monitor | sink.
+-type component_name() :: atom().
+-type module_config() :: module() | {module(), [term()]}.
+-type stack_config() :: [ component_name() | module_config() | stack_config() ].
+
+%%% Potential configuration item that can be found in a wiring file:
 -type config_item() ::
-    {buffer | monitor | sink, module(), [term()]} |
-    {buffer | monitor | sink, term(), module(), [term()]} |
-    {stack, [ term() | [ term() ] | {module(), [term()]} ]} |
-    {stack, [ term() | [ term() ] | {module(), [term()]} ], term()} |
-    {stack, [ term() | [ term() ] | {module(), [term()]} ], term(),
-      libemp_stack:fault_handler()}.
+      {component_type(), module_config()}
+    | {component_type(), component_name(), module_config()}
+    | {monitor, component_name(), module_config(), Buffer :: component_name()}
+    | {stack, stack_config()}
+    | {stack, stack_config(), Buffer :: component_name()}
+    | {stack, stack_config(), Buffer :: component_name(),
+                                libemp_stack:fault_handler()}.
 
 %%% =======================================================================
 %%% Public API
@@ -37,7 +45,7 @@ parse( Configs ) ->
 parse( Configs, App ) ->
   case pull_out_sinks( Configs ) of
     {ok, {Sinks, Definitions}} ->
-      Merge = fun(Config,AppObj) -> m(Config,Sinks,AppObj) end,
+      Merge = fun(Config,AppObj) -> m( Config, Sinks, AppObj ) end,
       libemp_util:escaping_foldl( Merge, App, Definitions );
     Error -> Error
   end.
@@ -55,9 +63,11 @@ pull_out_sinks( Configs ) ->
   pull_out_sinks(Configs,{#{},[]}).
 pull_out_sinks( [], Refs ) ->
   {ok, Refs};
-pull_out_sinks( [{sink,Module,Configs}|Rest], State ) ->
+pull_out_sinks( [{sink,ModuleConfigs}|Rest], State ) ->
+  {Module,Configs} = module_configs(ModuleConfigs),
   append_and_continue_pull_out( Module, Module, Configs, Rest, State );
-pull_out_sinks( [{sink,Name,Module,Configs}|Rest], State ) ->
+pull_out_sinks( [{sink,Name,ModuleConfigs}|Rest], State ) ->
+  {Module,Configs} = module_configs(ModuleConfigs),
   append_and_continue_pull_out( Name, Module, Configs, Rest, State );
 pull_out_sinks( [Def|Rest], {S,D} ) ->
   pull_out_sinks( Rest, {S,[Def|D]} ).
@@ -72,14 +82,37 @@ append_and_continue_pull_out( Name, Module, Configs, Rest, {S,D} ) ->
 %% @hidden
 %% @doc Merge in one of the definitions into the Application.
 m(_, _, {error, _}=Error) -> Error;
-m({stack,StackDef}, Sinks,         App) -> m_stack(StackDef,default,default,Sinks,App);
-m({stack,StackDef,Buf}, Sinks,     App) -> m_stack(StackDef,Buf,default,Sinks,App);
-m({stack,StackDef,Buf,FH}, Sinks,  App) -> m_stack(StackDef,Buf,FH,Sinks,App);
-m({buffer,Module,Configs}, _,      App) -> m_buffer(Module,Module,Configs,App);
-m({buffer,Name,Module,Configs}, _, App) -> m_buffer(Name,Module,Configs,App);
-m({monitor,Module,Configs}, _,     App) -> m_monitor(Module,Module,Configs,App);
-m({monitor,Name,Module,Configs}, _, App) -> m_monitor(Name,Module,Configs,App);
+
+m({stack, StackDef}, Sinks, App) ->
+  m_stack( StackDef, default, default, Sinks, App );
+m({stack,StackDef,Buf}, Sinks, App) ->
+  m_stack( StackDef, Buf, default, Sinks, App );
+m({stack,StackDef,BufferName,FaultHandler}, Sinks, App) ->
+  m_stack( StackDef, BufferName, FaultHandler, Sinks, App );
+
+m({buffer,ModuleConfigs}, _, App) ->
+  {Module, Configs} = module_configs(ModuleConfigs),
+  m_buffer( Module, Module, Configs, App );
+m({buffer,Name,ModuleConfigs}, _, App) ->
+  {Module, Configs} = module_configs(ModuleConfigs),
+  m_buffer( Name, Module, Configs, App );
+
+m({monitor,ModuleConfigs}, _, App) ->
+  {Module, Configs} = module_configs(ModuleConfigs),
+  m_monitor( Module, Module, Configs, default, App );
+m({monitor,Name,ModuleConfigs}, _, App) ->
+  {Module, Configs} = module_configs(ModuleConfigs),
+  m_monitor( Name, Module, Configs, default, App );
+m({monitor,Name,ModuleConfigs,BufferName}, _, App) ->
+  {Module,Configs} = module_configs(ModuleConfigs),
+  m_monitor( Name, Module, Configs, BufferName, App );
+
 m(Unknown, _, _) -> {error, {badarg,Unknown}}.
+
+%% @hidden
+%% @doc Be explicit about no configs even if the wire config writer was not.
+module_configs( {_Mod,_Conf}=MC ) -> MC;
+module_configs( Mod ) when is_atom( Mod ) -> {Mod,[]}.
 
 %% @hidden
 %% @doc Abstract over the Application Buffer merge. This allows us to have a
@@ -92,8 +125,8 @@ m_buffer( Name, Module, Configs, App ) ->
 %% @doc Abstract over the Application Monitor merges. This allows us to have a
 %%    consistent error mechanism.
 %% @end
-m_monitor( Name, Module, Configs, App ) ->
-  libemp_app_def:add_monitor( Name, Module, Configs, App ).
+m_monitor( Name, Module, Configs, BufferName, App ) ->
+  libemp_app_def:add_monitor( Name, Module, Configs, BufferName, App ).
 
 %% @hidden
 %% @doc Abstract over the Application Stack merges. This allow us to have a
