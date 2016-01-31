@@ -1,6 +1,6 @@
 # Lib EMP #
 
-[![Build Status](http://ci.slackless.com/api/badge/github.com/dstar4138/libemp/status.svg?branch=master)](http://ci.slackless.com/github.com/dstar4138/libemp)
+[![Build Status](https://travis-ci.org/dstar4138/libemp.svg?branch=master)](https://travis-ci.org/dstar4138/libemp)
 
 Building distributed systems is hard, it's worse without knowing all the trade 
 offs you are implicitly making ahead of time. LibEMP targets a set of
@@ -8,22 +8,20 @@ distributed systems for handling event processing, and attempts to both ease
 their creation as well as making these design decisions apparent and easier to
 reason about.
 
-## Background ##
-
 EMP stands for Extensible Monitoring Platform, and LibEMP is the core dynamic
-plug-in framework for event generation, routing, and processing. It handles the 
-fault-tolerance, scaling, and abstractions involved for building your own event 
+plug-in framework for event generation, routing, and processing. It handles the
+fault-tolerance, scaling, and abstractions involved for building your own event
 generators, routers, and processors.
 
-EMP builds on top of LibEMP to provide a dynamic subscription language, a clean
-user interfacing mechanism, and a Plug-In repository (for different event 
-sources). Its target is to be a personal cloud (IoTs) monitoring platform that 
-can run across your own machines. This goal aside, LibEMP makes no assumptions 
-about where events come from, how quickly they are generated, their content, or 
-even how they are processed. This lets LibEMP lend itself to potentially a wide 
-range of use cases.
- 
-## Abstractions ##
+## Building & Testing ##
+
+Just run `make`. There are a number of Modules in `src/eval/*` which can be used
+to test LibEMP as a library. There are also a number of pre-built applications
+using LibEMP in the
+[libemp_examples](https://github.com/dstar4138/libemp_examples/)
+package.
+
+## Background ##
 
 In event processing, you typically have two to three components you concern 
 yourself with: the event _sources_, their _processors_, and infrequently the 
@@ -35,7 +33,7 @@ to provide yet another abstraction on top of these concepts. Not necessarily a
 bad idea, but can complicate things when it comes times to scale out or become
 fault-tolerant (as these connections have been abstracted away).
 
-LibEMP talks about all three components, with a few querks and metadata 
+LibEMP talks about all three components, with a few quirks and metadata
 requirements for planning ahead in a distributed and fault-prone world. LibEMP
 extends Erlang Nodes to include information regarding your application's 
 structure. This is so the logic for handling Node/Network/Component faults can 
@@ -45,12 +43,12 @@ all be explicitly communicated.
 
 Starting at the end of the equation, LibEMP Event _Sinks_ are used for 
 encapsulating the processing of events. The functionality here is entirely up to
-the developer of the application, that being said, Sinks can be composed onto
-one another to easily extend their usefulness. 
+the developer of the application, that being said, Sinks can be composed and
+stacked onto one another to easily extend their usefulness.
 
-_Research is still being done on how to properly define and implement a Sink
-interface, so if you have experience in the topic or have some suggestions,
-please let us know._
+To learn by example, LibEMP bundles a number of Sinks which are general enough
+to fit into your application, please see the
+[Bundled Sinks](https://github.com/dstar4138/libemp/tree/develop/src/sinks).
 
 ### Buffers ###
 
@@ -72,7 +70,7 @@ computationally intensive event processing.
 
 To learn more about the Buffers currently in development and the trade offs 
 they make, please see the 
-[Bundled Buffers](https://github.com/dstar4138/libemp/tree/master/src/buffers).
+[Bundled Buffers](https://github.com/dstar4138/libemp/tree/develop/src/buffers).
 
 ### Monitors ###
 
@@ -90,8 +88,5 @@ Sinks to affect the streams in turn (thereby closing the event loop). For
 example, when a Github 'fork' event happens on a set of particular repositories,
 have the Sink automatically put a 'watch' on it.
 
-_Research is still being done on how to properly define and implement a Monitor
-interface, so if you have experience in the topic of have some suggestions,
-please let us know._
-
-
+To learn more about the Monitors currently in development, please see the
+[Bundled Monitors](https://github.com/dstar4138/libemp/tree/develop/src/monitors).

@@ -5,6 +5,15 @@
 %%%     `take' function will return a random number of events between
 %%%     0 and the max (set by the system cfg, buffer_take_count).
 %%%
+%%%     Usage:
+%%%         You must specify a list of events that can be randomly
+%%%         returned. i.e.
+%%%             > KnownEvents = [ {eventa, blah}, eventb, {eventc, 1, 2.0} ].
+%%%             > {ok, _, Buffer} = libemp_buffer:start( libemp_pop_buffer, [
+%%%                     {buffer_known_events, KnownEvents},
+%%%                     {buffer_take_count, 10}
+%%%               ]).
+%%%
 -module(libemp_pop_buffer).
 -behaviour(libemp_buffer).
 

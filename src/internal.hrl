@@ -1,5 +1,17 @@
-% Public Types
--include("libemp.hrl").
+% Private Types
+-type libemp_event() :: term().
+-type libemp_processor() :: pid() | atom().
+
+-type monitor_config() :: term().
+-record(monitorref, {
+  name   :: string(),
+  module :: atom(),
+  config :: [ monitor_config() ],
+  args   :: [ term() ],
+  buffer :: libemp_buffer:libemp_buffer(),
+  pid    :: atom() | pid(), % Can be a name or pid reference.
+  linked :: pid()
+}).
 
 % Debug Types
 %%% Asserting and validation of running code, only use temporarily. %%%

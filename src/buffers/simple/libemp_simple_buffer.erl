@@ -25,15 +25,15 @@
 %%   platform.
 %% @end
 initialize( Args ) ->
-    {ok, Pid} = gen_server:start_link( {local, ?MODULE}, ?MODULE, Args, [] ),
-    {ok, Pid, ?MODULE}.
+    {ok, Pid} = gen_server:start_link( ?MODULE, Args, [] ),
+    {ok, Pid, Pid}.
 
 %% @doc Register either a taker or giver with the buffer PID, by just returning
 %%   the gen_server API for it.
 %% @end
 register( _TakerGiver, Ref ) ->
     libemp_buffer:create( [
-                    {take, fun()  -> gen_server:call( Ref, take ) end},
+                    {take, fun()  -> gen_server:call( Ref, take, infinity ) end},
                     {give, fun(E) -> gen_server:cast( Ref, {give,E} ) end},
                     {size, fun()  -> gen_server:call( Ref, size ) end},
                     {unregister, fun() -> ok end} % ignore
@@ -51,11 +51,11 @@ destroy( Ref ) ->
 
 %% @doc Initialize the simple queue server.
 init( Args ) -> 
-    process_flag(trap_exit, true), 
+    process_flag(trap_exit, true),
     init_handler( Args ).
 
 %% @doc Handle gen_server calls. Currently used only for event removals.
-handle_call( take, _From, State ) -> take_handler( State );
+handle_call( take, From, State ) -> take_handler( From, State );
 handle_call( size, _From, State ) -> size_handler( State );
 handle_call( _Ignore, _From, State ) -> {reply, {error,badarg}, State}.
 
@@ -79,7 +79,8 @@ terminate( _Reason, _State ) -> ok.
 %%% ======
 %%% Private functionality
 %%% ======
--record(state, {queue = queue:new(), take_count = 1}).
+-record(state, {queue = queue:new(), take_count = 1,
+                take_hang = true, hang_queue = queue:new()}).
 
 init_handler( Args ) ->
     case proplists:lookup(buffer_take_count, Args) of
@@ -88,18 +89,31 @@ init_handler( Args ) ->
         none -> {ok, #state{}};
         _    -> {stop, {badarg, buffer_take_count}}
     end.
-take_handler( #state{queue=Q, take_count=C}=S ) ->
-    {V, NQ} = out(Q,C), 
-    {reply, V, S#state{queue=NQ}}.
+
+take_handler( From, #state{take_hang=Hang, queue=Q, take_count=C}=S ) ->
+    case {Hang, out( Q,C )} of
+        {true, {[], _}} ->
+            NHQ = queue:in( From, S#state.hang_queue ),
+            {noreply, S#state{hang_queue = NHQ}};
+        {_, {V, NQ}} ->
+            {reply, V, S#state{queue=NQ}}
+    end.
 size_handler( #state{queue=Q}=S ) -> {reply, queue:len(Q), S}.
-give_handler( V, #state{queue=Q}=S ) -> {noreply, S#state{queue=queue:in(V,Q)}}.
+give_handler( V, #state{hang_queue=HQ, queue=Q}=S ) ->
+    case queue:out(HQ) of
+        {empty,_} ->
+            {noreply, S#state{queue=queue:in(V,Q)}};
+        {{value, From}, NHQ} ->
+            gen_server:reply( From, [V] ),
+            {noreply, S#state{hang_queue=NHQ}}
+    end.
 
 out(Q,all)->
     {queue:to_list(Q),queue:new()};
 out(Q,1) ->
     case queue:out(Q) of
         {{value,V},NQ} -> {[V],NQ};
-        empty -> {[],Q}
+        {empty,Q}      -> {[],Q}
     end;
 out(Q,N) ->
     {Top,Rest} = lists:split(N, queue:to_list(Q)),

@@ -13,9 +13,15 @@
 -behaviour(libemp_buffer).
 
 % libemp_buffer Behaviour Callbacks. 
--export([initialize/1,register/2,destroy/1]).
+-export([initialize/1,
+    validate_configs/1,
+    register/2,destroy/1]).
 
 %% By default it's a FIFO queue of "unlimited" size.
+%% You can modify this with the following Args via libemp_buffer:start/2;
+%% {buffer_type, Type} - The type of input queue this is, can be fifo/lifo/ring.
+%% {buffer_size, pos_integer()} - Size of the ring buffer. Unused if fifo/lifo.
+%% {buffer_take_count, all | pos_integer()} - # items to return on a take/1.
 -define(DEFAULT_CONFIGS, {fifo, 0, all}).
 
 %% @doc Initialize the ets buffer and wrap the module calls in LibEMP Buffer
@@ -42,6 +48,21 @@ register( _TakerGiver, {Reference,ReadCount} ) ->
 destroy( {Reference, _} ) ->
     ets_buffer:delete_dedicated( Reference ).
 
+%% @doc Let LibEMP check the provided configs, to allow LibEMP to fail early.
+validate_configs( Args ) ->
+    case merge_args( Args, ?DEFAULT_CONFIGS ) of
+        {_,_,N} when is_integer(N) andalso N < 1 ->
+                        {error, "Take count is less than 1."};
+        {ring,0,_}   -> {error, "Ring is missing size."};
+        {lifo,_,all} -> {error, "Read-All does not work with lifo."};
+        {Type,_,_} when Type =/= lifo andalso
+                        Type =/= fifo andalso
+                        Type =/= ring ->
+            {error, "Unknown ets buffer type; must be: ring, fifo, or lifo."};
+        _Otherwise ->
+            ok
+    end.
+
 %%% =========================================================================
 %%% Private Functionality
 %%% =========================================================================
@@ -60,16 +81,12 @@ merge_args([_UnknownArgument|Rest], Configs) -> merge_args(Rest, Configs).
 %% @doc Build the `epocxy' ets_buffer for use as the LibEMP Event Buffer.
 build_ets_buffer_args_dedicated(Args) ->
     case merge_args( Args, ?DEFAULT_CONFIGS ) of
-        {ring,0,_}   -> {error, "Ring is missing size."};
-        {ring,S,R}   -> 
+        {ring,S,R} when S > 0 ->
             Tid = ets_buffer:create_dedicated(libemp_ets_event_buffer,ring,S),
             {ok, Tid, R};
-        {lifo,_,all} -> {error, "Read-All does not work with lifo."};
-        {Type,_,R} when Type =:= fifo orelse Type =:= lifo
-                     -> 
+        {Type,_,R} when Type =:= fifo orelse Type =:= lifo ->
             Tid = ets_buffer:create_dedicated(libemp_ets_event_buffer,Type),
-            {ok, Tid, R};
-        _ -> {error, "Unknown ets buffer type; must be: ring, fifo, or lifo."}
+            {ok, Tid, R}
     end.
 
 %% @hidden
