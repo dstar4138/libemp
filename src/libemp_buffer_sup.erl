@@ -12,7 +12,7 @@
 %% API
 -export([
   start_link/0,
-  add_buffer/3, remove_buffer/3
+  add_buffer/3, remove_buffer/1
 ]).
 
 %% Supervisor callbacks
@@ -42,8 +42,7 @@ add_buffer(Name, Module, Configs) ->
   end.
 
 %% @doc Terminate the buffer behind the Initializer with the given PID.
-remove_buffer( _Reason, Pid, Initializer ) ->
-  libemp_buffer:destroy( Initializer ),
+remove_buffer( Pid ) ->
   supervisor:terminate_child(?MODULE, Pid).
 
 %%%===================================================================

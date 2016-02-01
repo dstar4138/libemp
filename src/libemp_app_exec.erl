@@ -71,8 +71,7 @@ get_or_error_buffer( Name, Refs ) ->
 create_buffer( Name, Module, Configs, Refs ) ->
   try
     {ok, Pid} = libemp_buffer_sup:add_buffer( Name, Module, Configs ),
-    {ok, Initializer} = libemp_node:get_buffer( Name ),
-    [ {Name,Pid,Initializer} | Refs ]
+    [ {Name, Pid} | Refs ]
   catch _:Reason ->
     {error, Reason, Refs}
   end.
@@ -80,10 +79,10 @@ create_buffer( Name, Module, Configs, Refs ) ->
 %% @hidden
 %% @doc Uninstall the buffers that the App defines.
 uninstall_buffers( _Reason, [] ) -> ok;
-uninstall_buffers( Reason, [{default,_,_}|Others] ) ->
+uninstall_buffers( Reason, [{default,_}|Others] ) ->
   uninstall_buffers( Reason, Others ); % Skip default buffer, don't shut it down
-uninstall_buffers( Reason, [{_,Pid,Initializer}|Others] ) ->
-  catch libemp_buffer_sup:remove_buffer( Reason, Pid, Initializer ),
+uninstall_buffers( Reason, [{_,Pid}|Others] ) ->
+  catch libemp_buffer_sup:remove_buffer( Pid ),
   uninstall_buffers( Reason, Others ).
 
 %% @hidden

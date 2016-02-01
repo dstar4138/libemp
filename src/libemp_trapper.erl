@@ -7,7 +7,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2]).
+-export([start_link/2, start_link/3]).
 -export([stop/1, stop/2]).
 
 %% gen_server callbacks
@@ -27,10 +27,15 @@
 %%% API
 %%%===================================================================
 
-%% @doc Starts the processor server and links it to the buffer.
+%% @doc Starts the signal trapper and optionally unlinks the Pid to the calling
+%%    process. This is suppose to inject itself as the supervised service.
+%% @end
 -spec start_link( pid(), #{ atom() => fun() } ) ->
   {ok, Pid :: pid()} | {error, Reason :: term()}.
 start_link( Pid, Callbacks ) ->
+  start_link( false, Pid, Callbacks ).
+start_link( DoRelink, Pid, Callbacks ) ->
+  do_relinking( DoRelink, Pid ),
   gen_server:start_link( ?MODULE, [
       Pid, Callbacks
   ], []).
@@ -92,3 +97,6 @@ get_cb( Name, Arity, Callbacks ) ->
   maps:get( Name, Callbacks, fake_fun( Arity ) ).
 fake_fun( 0 ) -> fun()  -> ok end;
 fake_fun( 1 ) -> fun(_) -> ok end.
+
+do_relinking( true, Pid ) -> unlink( Pid );
+do_relinking( _, _ ) -> ok.

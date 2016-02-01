@@ -69,7 +69,7 @@
 %% on buffer registration. If the buffer implementation does not require a 
 %% subprocess tree (and thus nothing to supervise), this function can just 
 %% return the arguments for successful registration.
--callback initialize( Args :: [ term() ] ) -> {ok, Ref :: term()} |
+-callback initialize( Args :: [ term() ] ) -> {ok, Ref :: pid() | term()} |
                                               {ok, pid(), Ref :: term()} |
                                               {stop, Reason :: term()}.
 
@@ -80,7 +80,7 @@
                                       {ok, libemp_buffer()} |
                                       {error, Reason :: term()}.
 
-%% Breakdown the buffer process tree safely. This is synonomous with `gen_*' 
+%% Breakdown the buffer process tree safely. This is synonymous with `gen_*'
 %% terminate callback. 
 -callback destroy( Ref ::term() ) -> ok.
 
@@ -149,13 +149,8 @@ validate_configs( Name, Module, Configs ) ->
                                     {error, Reason :: term()}.
 start_link( Name, Mod, Args ) ->
     case libemp_buffer:start( Name, Mod, Args ) of
-        {ok, false, Initializer} ->
-            save_buffer( Initializer ),
-            ignore;
-        {ok, Pid, Initializer} ->
-            save_buffer( Initializer ),
-            verify_link_pid( Pid ),
-            {ok, Pid};
+        {ok, PotentialPid, Initializer} ->
+            wrap( PotentialPid, Initializer );
         {error, _} = Err -> 
             Err
     end.
@@ -195,7 +190,8 @@ start( Name, Mod, BufferInstanceArgs ) ->
         catch libemp_util:wrap_extern( Mod, initialize, [BufferInstanceArgs] )
     of
         {ok, Ref} ->
-            {ok, false, new_initializer(Name, Mod, Ref)};
+            Ret = case is_pid(Ref) of true -> Ref; _ -> false end,
+            {ok, Ret, new_initializer(Name, Mod, Ref)};
         {ok, Pid, Ref} ->
             {ok, Pid, new_initializer(Name, Mod, Ref)};
         {stop, Reason} -> 
@@ -265,9 +261,9 @@ unregister( #libemp_buffer{unregister=Unregister} ) ->
 -spec destroy( libemp_buffer() | libemp_buffer_init() ) -> ok.
 destroy( #libemp_buffer{ref=BufferInit} ) -> 
     destroy( BufferInit );
-destroy( #libemp_buffer_initializer{ module=Mod, init_ref=Ref }=Init ) -> 
-    libemp_util:wrap_extern(Mod, destroy, [Ref]), % ignore errors.
-    remove_buffer( Init ).
+destroy( #libemp_buffer_initializer{ module=Mod, init_ref=Ref }=Init ) ->
+    remove_buffer( Init ),
+    do_destroy( Mod, Ref ).
 
 %% @doc Drop all events in a buffer until it's size is 0. Only should be used
 %%   in validation, and is not safe for production use (hangs until complete,
@@ -310,18 +306,18 @@ get_callback( FunName, Arity, Callbacks ) ->
     end.
 
 %% @hidden
+%% @doc Destroy the buffer reference safely and log the result of doing so.
+do_destroy( Mod, Ref ) ->
+    Return = (catch libemp_util:wrap_extern(Mod, destroy, [Ref])),
+    ?LOG("Buffer(~p) Destroy: ~p~n",[Mod,Return]),
+    Return.
+
+%% @hidden
 %% @doc Save the buffer according to the LibEMP System configuration. This
 %%   involves pulling out the unique ID and saving it to the Node's State
 %%   Server. 
 %% @end
-save_buffer( #libemp_buffer_initializer{id=undefined}=BufferObj ) ->
-    NewUniqueID = erlang:unique_integer([positive]),
-    libemp_node:save_buffer(
-      NewUniqueID, 
-      BufferObj#libemp_buffer_initializer{id=NewUniqueID} 
-    );
 save_buffer( #libemp_buffer_initializer{id=ID}=BufferObj ) ->
-    % We already have an ID, so push.
     libemp_node:save_buffer( ID, BufferObj ).
 
 %% @hidden
@@ -331,10 +327,24 @@ remove_buffer( #libemp_buffer_initializer{id=ID} ) ->
     ok.
 
 %% @hidden
-%% @doc Link a process identifier, but if there is an error doing so return it. 
-verify_link_pid( Pid ) ->
-    case catch link( Pid ) of
-        true -> {ok, Pid};
-        {'EXIT',{noproc,_}} -> {error, noproc}
-    end.
+%% @doc Wrap the external process ID in a signal trapper so we can safely
+%%    call the buffer's destroy functionality.
+%% @end
+wrap( false, Initializer ) ->
+  save_buffer( Initializer ),
+  ignore;
+wrap( Pid, Initializer ) ->
+  Callbacks = #{
+    terminate => fun() -> destroy( Initializer ) end,
+    failure   => fun(_Reason) -> destroy( Initializer ) end
+  },
+  case libemp_trapper:start_link( true, Pid, Callbacks ) of
+    % Override and return the wrapper's Pid instead so all signals go to it.
+    {ok, MonPid} ->
+      save_buffer( Initializer ),
+      {ok, MonPid};
+    Error ->
+      destroy( Initializer ),
+      Error
+  end.
 

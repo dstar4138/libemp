@@ -269,7 +269,7 @@ init([]) ->
 %% @doc Handling call messages
 handle_call({save_buffer,#libemp_node_buffers{}=R},_From,#state{buftab=BT}=S)->
     insert(BT,R,S);
-handle_call({remove_buffer,ID},_From,#state{buftab=BT}=S)->
+handle_call({delete_buffer,ID},_From,#state{buftab=BT}=S)->
     delete(BT,ID,S);
 handle_call({save_monitor,#libemp_node_monitors{}=R},_From,#state{montab=MT}=S) ->
     insert(MT,R,S);
