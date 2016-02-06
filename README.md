@@ -15,11 +15,12 @@ generators, routers, and processors.
 
 ## Building & Testing ##
 
-Just run `make`. There are a number of Modules in `src/eval/*` which can be used
-to test LibEMP as a library. There are also a number of pre-built applications
-using LibEMP in the
+Just run `make shell`. 
+There are a number of Modules in `src/eval/*` which can be used
+to test various functionality of LibEMP as a library. 
+There are also a number of pre-built applications using LibEMP in the
 [libemp_examples](https://github.com/dstar4138/libemp_examples/)
-package.
+package which you can import.
 
 ## Background ##
 
