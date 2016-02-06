@@ -6,7 +6,7 @@
 %%%     and then returns it. To do so, it must build a transferable structure
 %%%     (a record). All interactions with the buffer go through callbacks 
 %%%     embedded into this structure. This reduces the complexity of buffer
-%%%     implementation and useage, at the cost of portability. 
+%%%     implementation and usage, at the cost of portability.
 %%%
 %%%     We made this trade off to remove forced implementation bottlenecks
 %%%     such as requiring a gen_server as the synchronization point. These
@@ -67,7 +67,7 @@
 
 %% Start up the buffer process tree. The result of this function is passed in
 %% on buffer registration. If the buffer implementation does not require a 
-%% subprocess tree (and thus nothing to supervise), this function can just 
+%% sub-process tree (and thus nothing to supervise), this function can just
 %% return the arguments for successful registration.
 -callback initialize( Args :: [ term() ] ) -> {ok, Ref :: pid() | term()} |
                                               {ok, pid(), Ref :: term()} |

@@ -146,9 +146,9 @@ c_timestamp( _,  State ) ->
 %% @end
 c_user_provided( Type, #context{contexters=Funs}=State) ->
   {Context,NewFuns} = lists:foldl(
-                        fun({Contexter,State}, {Context, PrevFuns}) ->
+                        fun({Contexter,NState}, {Context, PrevFuns}) ->
                               {MoreContext,NewState} =
-                                libemp_util:wrap_extern(Contexter,[Type,State]),
+                                libemp_util:wrap_extern(Contexter,[Type,NState]),
                               NewContext = maps:merge(MoreContext,Context),
                               NewPrevFuns = [{Contexter,NewState}|PrevFuns],
                               {NewContext, NewPrevFuns}

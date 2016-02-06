@@ -21,7 +21,7 @@ unlink( #monitorref{buffer=Buffer, linked=Linked} ) ->
   erlang:unlink(Linked). %TODO: remove from node table!
 
 %% @doc Emit a log message into the LibEMP Monitor log for this Monitor.
-log( Level, Message, #monitorref{name = Name} ) ->
-  ?LOG( "~p:~p:~s~n", [Level, Name, Message] ).
+log( _Level, _Message, #monitorref{name = _Name} ) ->
+  ?LOG( "~p:~p:~s~n", [_Level, _Name, _Message] ).
   %TODO: this should probably have more of an indirection.
 

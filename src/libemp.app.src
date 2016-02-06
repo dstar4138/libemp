@@ -1,7 +1,7 @@
 {application, libemp,
  [
   {description, "Core Library for the Extensible Monitoring Platform"},
-  {vsn,"0.1"},
+  {vsn,"0.1.0"},
   {registered, [libemp]},
   {applications, [kernel,stdlib]},
   {mod, {libemp_app,[]}}
