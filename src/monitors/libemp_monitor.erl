@@ -15,6 +15,7 @@
 -include("../internal.hrl").
 
 -export([start_link/3, start_link/4, start/4]).
+-export([test_bootstrap/2]).
 
 -opaque platform_reference() :: #monitorref{}.
 -export_type([platform_reference/0]).
@@ -31,6 +32,7 @@
          MonitorName   :: term(),
          MonitorConfig :: [ monitor_config() ],
          Reason        :: term().
+-optional_callbacks([describe/2]).
 
 %%% Initialize the Monitor State:
 %%%   Start up the Monitor and give it the Reference to LibEMP. It can use this
@@ -80,6 +82,16 @@ start( MonitorName, Module, MonitorArgs, Buffer ) ->
           {ok, MonitorConfig} ->
               load( MonitorName, Module, MonitorArgs, MonitorConfig, Buffer )
        end)
+  end.
+
+%% @doc Start up the monitor and log all events to error_logger.
+test_bootstrap( Module, Configs ) ->
+  {ok, _, BufRef} = libemp_buffer:start(libemp_logger_buffer),
+  try
+    libemp_monitor:start(Module, Module, Configs, BufRef)
+  catch Type:Reason ->
+    libemp_buffer:destroy(BufRef),
+    Type(Reason)
   end.
 
 %%% ==========================================================================
@@ -159,7 +171,7 @@ create_ref( Name, Module, Args, Config, Buffer ) ->
 %% @doc Wrap calls to the behaviour's implementation of `describe/1'.
 do_describe( MonitorName, Module, MonitorArgs ) ->
   Args = [ MonitorName, MonitorArgs ],
-  Result = (catch libemp_util:wrap_extern( Module, describe, Args )),
+  Result = (catch libemp_util:wrap_extern( Module, describe, Args, {ok,[]} )),
   ?LOG("Monitor(~p) Describe: ~p~n",[Module, Result]),
   libemp_util:exit_to_error( Result ).
 

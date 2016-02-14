@@ -20,8 +20,9 @@ unlink( #monitorref{buffer=Buffer, linked=Linked} ) ->
   libemp_buffer:unregister(Buffer),
   erlang:unlink(Linked). %TODO: remove from node table!
 
-%% @doc Emit a log message into the LibEMP Monitor log for this Monitor.
-log( _Level, _Message, #monitorref{name = _Name} ) ->
-  ?LOG( "~p:~p:~s~n", [_Level, _Name, _Message] ).
-  %TODO: this should probably have more of an indirection.
+%% @doc Emit a log message into the LibEMP node. If the sys app is not up,
+%%   these reroute to error_logger.
+%% @end
+log( Level, Message, #monitorref{name = Name} ) ->
+  libemp_node_monitor:emit_log( Level, Name, Message ).
 
