@@ -41,13 +41,7 @@ register( _TakerGiver, Ref ) ->
 
 %% @doc Ask the process tree to shutdown.
 destroy( Ref ) ->
-    case whereis(Ref) of
-        Pid when is_pid(Pid) ->
-            exit( Pid, normal ),
-            hang_for_destroy( Ref ); % TODO: really hang here?
-        _ -> 
-            ok % Consider destroyed.
-    end.
+    gen_server:cast( Ref, shutdown ).
 
 %% @doc Initialize the simple queue server.
 init( Args ) -> 
@@ -61,6 +55,7 @@ handle_call( _Ignore, _From, State ) -> {reply, {error,badarg}, State}.
 
 %% @doc Handle gen_server casts. Currently used only for event additions.
 handle_cast( {give, Event}, State ) -> give_handler( Event, State );
+handle_cast( shutdown, State ) -> {stop, shutdown, State};
 handle_cast( _Ignore, State ) -> {noreply, State}.
 
 %%% ======
@@ -118,9 +113,3 @@ out(Q,1) ->
 out(Q,N) ->
     {Top,Rest} = lists:split(N, queue:to_list(Q)),
     {Top, queue:from_list(Rest)}.
-
-hang_for_destroy( Ref ) ->
-    case whereis( Ref ) of
-        Pid when is_pid(Pid) -> hang_for_destroy( Ref );
-        _ -> ok
-    end.

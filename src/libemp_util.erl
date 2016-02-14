@@ -5,7 +5,7 @@
 -define(APPLICATION,libemp).
 
 -export([wrap_extern/2,wrap_extern/3,wrap_extern/4]).
--export([escaping_foldl/3]).
+-export([escaping_foldl/3, do/1]).
 -export([function_exists/1, function_exists/2]).
 -export([exit_to_error/1]).
 
@@ -27,6 +27,17 @@ escaping_foldl( Fun, Acc, [H|T] ) ->
         {ok,NAcc}       -> escaping_foldl( Fun, NAcc, T );
         NAcc            -> escaping_foldl( Fun, NAcc, T )
     end.
+
+%% @doc Provided a list of functions and arguments, do them in order until
+%%   we receive a common error code. Returns the last function's value.
+%% @end
+-spec do( [ {fun(), list()} ] ) -> term().
+do( Funs ) ->
+  escaping_foldl(
+    fun( {Fun, Args}, _ ) ->
+      erlang:apply( Fun, Args )
+    end,
+    ok, Funs ).
 
 %% @doc Wrap calls into behaviour implementations. This is were we can
 %%   optionally turn on logging, verbosity, etc.

@@ -1,0 +1,9 @@
+% -*- mode: erlang -*-
+%% SYS Application
+%%
+%%    Set up a node monitoring application to handle node events.
+%%
+{buffer, system, libemp_simple_buffer}.
+{monitor, node, libemp_node_monitor, system}.
+{sink, logger, libemp_logger_sink}.
+{stack, [logger], system}.

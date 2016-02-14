@@ -65,14 +65,13 @@ install_buffers( #{def:=AppDef} ) ->
   libemp_app_def:foldl_buffers(InstallBuffer, [], AppDef).
 get_or_error_buffer( default, Refs ) ->
   {ok, Initializer} = libemp_node:get_buffer(),
-  [{default, ignore, Initializer} | Refs];
+  [{default, Initializer} | Refs];
 get_or_error_buffer( Name, Refs ) ->
   {error, {buffer_already_exists, Name}, Refs}.
 create_buffer( Name, Module, Configs, Refs ) ->
   try
     {ok, Pid} = libemp_buffer_sup:add_buffer( Name, Module, Configs ),
-    {ok, Initializer} = libemp_node:get_buffer( Name ),
-    [ {Name,Pid,Initializer} | Refs ]
+    [ {Name, Pid} | Refs ]
   catch _:Reason ->
     {error, Reason, Refs}
   end.
@@ -80,10 +79,10 @@ create_buffer( Name, Module, Configs, Refs ) ->
 %% @hidden
 %% @doc Uninstall the buffers that the App defines.
 uninstall_buffers( _Reason, [] ) -> ok;
-uninstall_buffers( Reason, [{default,_,_}|Others] ) ->
+uninstall_buffers( Reason, [{default,_}|Others] ) ->
   uninstall_buffers( Reason, Others ); % Skip default buffer, don't shut it down
-uninstall_buffers( Reason, [{_,Pid,Initializer}|Others] ) ->
-  catch libemp_buffer_sup:remove_buffer( Reason, Pid, Initializer ),
+uninstall_buffers( Reason, [{_,Pid}|Others] ) ->
+  catch libemp_buffer_sup:remove_buffer( Pid ),
   uninstall_buffers( Reason, Others ).
 
 %% @hidden
@@ -95,7 +94,7 @@ install_monitors( #{def:=AppDef} ) ->
       _ -> create_monitor( Name, Module, Configs, BufRef, Refs )
     end
   end,
-  libemp_app_def:foldl_monitor( InstallMonitor, [], AppDef ).
+  libemp_app_def:foldl_monitors( InstallMonitor, [], AppDef ).
 create_monitor( Name, Module, Configs, BufRef, Refs ) ->
   try
     {ok, Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),

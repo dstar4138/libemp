@@ -79,7 +79,7 @@ save_default_proc( Buffer, Pid ) ->
             pid = Pid,
             buffer_id = libemp_buffer:get_id( Buffer )
       },
-      gen_server:call( ?MODULE, {save_proc, Row} );
+      gen_server:call( ?MODULE, {new, proc, Row} );
     _ -> ok
   end.
 
@@ -97,9 +97,9 @@ get_default_proc( Buffer ) ->
 
 %% @doc Remove the default processor for the given Buffer.
 -spec remove_default_proc( term(), pid() ) -> ok | {error, any()}.
-remove_default_proc( Buffer, Pid ) ->
+remove_default_proc( Buffer, _Pid ) ->
   BufferId = libemp_buffer:get_id( Buffer ),
-  gen_server:call(?MODULE, {delete_proc, BufferId, Pid}).
+  gen_server:call(?MODULE, {delete, proc, BufferId}).
 
 %% Node Buffer Initializers:
 %%  When a buffer is created, we save a registration mechanism in the table
@@ -129,7 +129,7 @@ save_buffer( Active, ID, Initializer ) ->
     Row = #libemp_node_buffers{ id=ID, 
                                 initializer=Initializer, 
                                 active=Active },
-    case gen_server:call(?MODULE, {save_buffer, Row} ) of
+    case gen_server:call(?MODULE, {new, buffer, Row} ) of
          ok -> {ok, ID};
          error -> error
     end.
@@ -139,7 +139,7 @@ save_buffer( Active, ID, Initializer ) ->
 %% @end
 -spec remove_buffer( ID :: term() ) -> ok | error. 
 remove_buffer( ID ) ->
-    gen_server:call(?MODULE, {delete_buffer, ID}).
+    gen_server:call(?MODULE, {delete, buffer, ID}).
 
 %% @doc Returns the top buffer unless an ID is provided. If no buffer is
 %%   provided it will return an error.
@@ -169,13 +169,13 @@ get_buffer( ID ) ->
 %% @doc Save the Monitor configuration and platform ref for de-initialization.
 save_monitor( Name, PlatformRef ) ->
   Row = #libemp_node_monitors{ name = Name, pr = PlatformRef },
-  gen_server:call(?MODULE, {save_monitor, Row}).
+  gen_server:call(?MODULE, {new, monitor, Row}).
 
 %% @doc Remove the references Monitor from the Node's database.
 remove_monitor( #monitorref{name = Name} ) ->
-  gen_server:call(?MODULE, {delete_monitor, Name});
+  gen_server:call(?MODULE, {delete, monitor, Name});
 remove_monitor( Name ) ->
-  gen_server:call(?MODULE, {delete_monitor, Name}).
+  gen_server:call(?MODULE, {delete, monitor, Name}).
 
 %% @doc Get the MonitorRefrence and the process identifier of the named Monitor.
 get_monitor( #monitorref{pid = Pid}=PR ) ->
@@ -231,7 +231,7 @@ stop_application( AppName ) ->
   [Refs] = ets:lookup( ?LIBEMP_NODE_APPLICATIONS, AppName ),
   AppRefs = Refs#libemp_node_applications.app_refs,
   libemp_app_exec:uninstall( normal, AppRefs ),
-  gen_server:call( ?MODULE, {delete_application, AppName} ).
+  gen_server:call( ?MODULE, {delete, application, AppName} ).
 
 %% @doc Inject the Application onto the local libemp_node.
 inject( AppName, AppDef ) ->
@@ -240,7 +240,7 @@ inject( AppName, AppDef ) ->
       App = #libemp_node_applications {
         name=AppName, app_def=AppDef, app_refs=AppRefs
       },
-      gen_server:call( ?MODULE, {save_application, App} );
+      gen_server:call( ?MODULE, {new, application, App} );
     Error -> Error
   end.
 
@@ -267,22 +267,12 @@ init([]) ->
 
 %% @private
 %% @doc Handling call messages
-handle_call({save_buffer,#libemp_node_buffers{}=R},_From,#state{buftab=BT}=S)->
-    insert(BT,R,S);
-handle_call({remove_buffer,ID},_From,#state{buftab=BT}=S)->
-    delete(BT,ID,S);
-handle_call({save_monitor,#libemp_node_monitors{}=R},_From,#state{montab=MT}=S) ->
-    insert(MT,R,S);
-handle_call({delete_monitor,Name},_From,#state{montab=MT}=S)->
-    delete(MT,Name,S);
-handle_call({save_application,#libemp_node_applications{}=R},_From,#state{apptab=AT}=S) ->
-    insert(AT,R,S);
-handle_call({delete_application,AppName},_From,#state{apptab=AT}=S) ->
-    delete(AT,AppName,S);
-handle_call({save_proc,#libemp_node_processors{}=R},_From,#state{proctab=PT}=S) ->
-    insert(PT,R,S);
-handle_call({delete_proc,BID,_Pid},_From,#state{proctab=PT}=S) ->
-    delete(PT,BID,S);
+handle_call({new,Type,Thing}=Event, _From, State) ->
+    node_event(Event),
+    insert(Type,Thing,State);
+handle_call({delete,Type,Thing}=Event, _From, State) ->
+    node_event(Event),
+    delete(Type,Thing,State);
 handle_call(Request, From, State) ->
     ?ERROR("Bad Request to Node Server from (~p): ~p~n",[From,Request]),
     {reply, {error, badreq}, State}.
@@ -311,10 +301,31 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-insert( Table, Row, State ) ->
+node_event( Event ) ->
+  case Event of
+    {new, Type, Thing} ->
+      ID = element( 2, Thing ),
+      libemp_node_monitor:emit_app_event( new, Type, ID );
+    {delete, Type, Thing} ->
+      libemp_node_monitor:emit_app_event( delete, Type, Thing );
+    _ ->
+      ok
+  end.
+
+get_table( Type, State ) ->
+  case Type of
+    buffer -> State#state.buftab;
+    monitor -> State#state.montab;
+    application -> State#state.apptab;
+    proc -> State#state.proctab
+  end.
+
+insert( Type, Row, State ) ->
+  Table = get_table( Type, State ),
   true = ets:insert( Table, Row ),
   {reply, ok, State}.
-delete( Table, ID, State ) ->
+delete( Type, ID, State ) ->
+  Table = get_table( Type, State ),
   true = ets:delete( Table, ID ),
   {reply, ok, State}.
 

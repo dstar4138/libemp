@@ -46,7 +46,7 @@
 -spec start_link( atom(), atom(), [term()]) ->
   {ok, Pid :: pid()} | {error, Reason :: term()}.
 start_link( BufferName, SinkModule, SinkConfigs ) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [
+  gen_server:start_link( ?MODULE, [
     BufferName, SinkModule, SinkConfigs
   ], []).
 

@@ -2,47 +2,50 @@
 # Extensible Monitoring Platform Makefile
 #
 ERL=$(shell which erl)
-REBAR=$(shell which rebar || echo $(CURDIR)/bin/rebar)
+REBAR=$(shell which rebar3 || echo $(CURDIR)/bin/rebar3)
 DEPSOLVER_PLT=$(CURDIR)/.depsolver_plt
-DIALYZER_WARN=-Wrace_conditions -Werror_handling -Wunmatched_returns -Wunderspecs 
-DIALYZER_ARGS=--plt $(DEPSOLVER_PLT) --no_check_plt $(DIALYZER_WARN)
 TYPER_ARGS=--plt $(DEPSOLVER_PLT) 
-USED_APPS=kernel stdlib erts crypto hipe sasl public_key
 
 .PHONY: libemp release deps docs testall eunit dialyzer typer clean distclean
 
 ##BUILDING
-libemp: deps
+libemp:
 	$(REBAR) compile
 
-deps:
-	$(REBAR) get-deps
-
-docs: 
-	$(REBAR) doc
+docs:
+	$(REBAR) edoc
 
 ##TESTING
-testall: libemp eunit dialyzer typer
+shell:
+	$(REBAR) as test shell
+
+prodshell:
+	$(REBAR) as prod shell
+
+test: eunit
 
 eunit:
-	$(REBAR) eunit
+	$(REBAR) eunit --cover
 
-$(DEPSOLVER_PLT):
-	-dialyzer --output_plt $(DEPSOLVER_PLT) --build_plt --apps $(USED_APPS)
-
-dialyzer: $(DEPSOLVER_PLT) deps
-	-dialyzer $(DIALYZER_ARGS) --src ./src -I ./include
+dialyzer:
+	$(REBAR) dialyzer --update-plt=false 
 
 typer: $(DEPSOLVER_PLT) deps
-	-typer $(TYPER_ARGS) -r ./src -I ./include
+	typer $(TYPER_ARGS) -r ./src -I ./include
 
 ##CLEANING
 clean:
-	-$(REBAR) clean
+	$(REBAR) clean
 
 distclean: clean
-	-$(REBAR) delete-deps
+	-$(REBAR) clean --all
 	-rm $(DEPSOLVER_PLT)
-	-rm -rf ebin
-	-rm -rf doc
+	-rm -rf _build
+	-rm -rf _checkouts
 
+## RELEASE
+release:
+	$(REBAR) as prod,native release
+
+tar:
+	$(REBAR) as prod tar
