@@ -1,6 +1,6 @@
 # Lib EMP #
 
-[![Build Status](https://travis-ci.org/dstar4138/libemp.svg?branch=master)](https://travis-ci.org/dstar4138/libemp)
+*Master: [![Build Status](https://travis-ci.org/dstar4138/libemp.svg?branch=master)](https://travis-ci.org/dstar4138/libemp) | Develop: [![Build Status](https://travis-ci.org/dstar4138/libemp.svg?branch=develop)](https://travis-ci.org/dstar4138/libemp)*
 
 Building distributed systems is hard, it's worse without knowing all the trade 
 offs you are implicitly making ahead of time. LibEMP targets a set of
