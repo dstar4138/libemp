@@ -19,6 +19,9 @@ docs:
 shell:
 	$(REBAR) as test shell
 
+prodshell:
+	$(REBAR) as prod shell
+
 test: eunit
 
 eunit:

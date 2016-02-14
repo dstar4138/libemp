@@ -60,7 +60,7 @@ start() -> application:start( ?APP ).
 start( AppName, AppDef ) ->
     application:ensure_started( ?APP ),
     case validate_app( AppName, AppDef ) of
-        ok    -> libemp_node:inject( AppName, AppDef );
+        {ok, CleanAppDef} -> libemp_node:inject( AppName, CleanAppDef );
         Error -> Error
     end.
 
@@ -88,19 +88,27 @@ validate_app( AppName, AppDef ) ->
 validate_app_def( AppDef ) ->
   case libemp_app_def:validate_wiring( AppDef ) of
     ok -> validate_modules_exist( AppDef );
+    {error, {missing_buffer, default}} ->
+      NewAppDef =
+        libemp_app_def:add_buffer(default, libemp_simple_buffer, [], AppDef),
+      validate_app_def( NewAppDef );
     Err -> Err
   end.
 
 validate_modules_exist( AppDef ) ->
-  libemp_app_def:foldl_buffers(
-    fun( {_,Module,_}, _ ) -> module_exists(Module) end, ok, AppDef ),
-  libemp_app_def:foldl_monitor(
-    fun( {_,Module,_,_}, _ ) -> module_exists(Module) end, ok, AppDef ),
-  libemp_app_def:foldl_processors(
-    fun( {_,Module,_,_}, _ ) -> module_exists(Module) end, ok, AppDef ).
-
-module_exists( Module ) ->
+  Args = [fun module_exists/2, AppDef, AppDef],
+  libemp_util:do([
+    {fun libemp_app_def:foldl_buffers/3, Args},
+    {fun libemp_app_def:foldl_monitors/3, Args},
+    {fun libemp_app_def:foldl_processors/3, Args}
+  ]).
+module_exists( Def, AppDef ) ->
+  Module = determine_module(Def),
   case code:ensure_loaded( Module ) of
-    {module, _} -> ok;
-    {error, Reason} -> throw( {Reason, Module} )
+    {module, _} -> AppDef;
+    {error, Reason} ->
+      % Break out of the folds early on error.
+      throw( {error, {Reason, Module}} )
   end.
+determine_module({_,Module,_}) -> Module;
+determine_module({_,Module,_,_}) -> Module.

@@ -65,7 +65,7 @@ install_buffers( #{def:=AppDef} ) ->
   libemp_app_def:foldl_buffers(InstallBuffer, [], AppDef).
 get_or_error_buffer( default, Refs ) ->
   {ok, Initializer} = libemp_node:get_buffer(),
-  [{default, ignore, Initializer} | Refs];
+  [{default, Initializer} | Refs];
 get_or_error_buffer( Name, Refs ) ->
   {error, {buffer_already_exists, Name}, Refs}.
 create_buffer( Name, Module, Configs, Refs ) ->
@@ -94,7 +94,7 @@ install_monitors( #{def:=AppDef} ) ->
       _ -> create_monitor( Name, Module, Configs, BufRef, Refs )
     end
   end,
-  libemp_app_def:foldl_monitor( InstallMonitor, [], AppDef ).
+  libemp_app_def:foldl_monitors( InstallMonitor, [], AppDef ).
 create_monitor( Name, Module, Configs, BufRef, Refs ) ->
   try
     {ok, Pid} = libemp_monitor_sup:add_monitor(Name,Module,Configs,BufRef),

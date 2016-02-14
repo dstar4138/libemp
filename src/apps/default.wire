@@ -3,6 +3,4 @@
 %%
 %%    Set the default buffer and attach an empty stack to it.
 %%
-
 {buffer, default, libemp_simple_buffer}.
-{stack, [], default}.

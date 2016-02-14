@@ -16,12 +16,9 @@
 ]).
 -export([
   foldl_buffers/3,
-  foldl_monitor/3,
+  foldl_monitors/3,
   foldl_processors/3
 ]).
-
-%% Classic buffer
--define(DEFAULT_BUFFER, {libemp_simple_buffer, []}).
 
 %% When the parse is complete we will have an Application definition.
 -opaque app_def() :: #{
@@ -30,7 +27,7 @@
   procs    => [ { default|term(), module(), [term()] } ]
   }.
 -define(NEW_APP, #{ monitors => #{},
-                    buffers => #{default => ?DEFAULT_BUFFER},
+                    buffers => #{},
                     procs => []
                   }).
 -export_type([app_def/0]).
@@ -118,14 +115,14 @@ foldl_buffers( Fun, Init, #{buffers := Buffers} ) ->
 %% @doc Fold over the list of Monitors and perform some task for each. Will
 %%   escape early if the function EXITs or returns a value of `{error,_}'.
 %% @end
--spec foldl_monitor( fun((MonitorItem,App)->App), App, app_def() ) -> App
+-spec foldl_monitors( fun((MonitorItem,App)->App), App, app_def() ) -> App
           when MonitorItem :: { Name    :: term(),
                                 Module  :: module(),
                                 Configs :: [term()],
                                 BufRef  :: term()
                               },
                App :: any().
-foldl_monitor( Fun, Init, #{monitors := Monitors} ) ->
+foldl_monitors( Fun, Init, #{monitors := Monitors} ) ->
   MonitorList = monitors_to_list( Monitors ),
   libemp_util:escaping_foldl( Fun, Init, MonitorList ).
 
