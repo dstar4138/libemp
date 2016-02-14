@@ -1,17 +1,17 @@
-%%% Timer Plug-in -
+%%% LibEMP Timer Monitor -
+%%%
+%%%   Computes a `tick' event every minute of the day. The tick event can be
+%%%   used to synchronize status updates or unlock gates in the sink stacks.
 %%%
 -module(libemp_timer_monitor).
 -behaviour(libemp_monitor).
 -vsn({1,0,0}).
 
 %% LibEMP Monitor API
--export([ describe/2, setup/3, destroy/3 ]).
+-export([ setup/3, destroy/3 ]).
 
 %% Private exports
--export([loop/2]).
-
-%% LibEMP Monitor Definition.
--define(MONITOR_CONFIG, []).
+-export([ loop/2 ]).
 
 %% Our event structure that we generate.
 -define(TICK_EVENT(Minutes,Hours,Day,Month,DayOfWeek),
@@ -22,17 +22,10 @@
 %%% LibEMP Monitor Callbacks
 %%% ==========================================================================
 
-%% @doc Return default name and libemp configuration for the Cron monitor. We
-%%   do not need to check the host to see if we are able to run as there are no
-%%   requirements.
-%% @end
-describe( _Name, _Args ) ->
-  {ok, ?MONITOR_CONFIG}.
-
 %% @doc Initialize our Monitor.
 setup( _Args, _Config, EMP ) ->
-  Pid = spawn(?MODULE,loop,[EMP, current_tick()]),
-  {ok,Pid}.
+  Pid = spawn_link(?MODULE, loop, [EMP, current_tick()]),
+  {ok, Pid}.
 
 %% @doc Shutdown our Monitor by killing the timer.
 destroy( _Reason, Pid, _EMP ) ->
