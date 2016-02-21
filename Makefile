@@ -3,8 +3,6 @@
 #
 ERL=$(shell which erl)
 REBAR=$(shell which rebar3 || echo $(CURDIR)/bin/rebar3)
-DEPSOLVER_PLT=$(CURDIR)/.depsolver_plt
-TYPER_ARGS=--plt $(DEPSOLVER_PLT) 
 
 .PHONY: libemp release deps docs testall eunit dialyzer typer clean distclean
 
@@ -28,10 +26,7 @@ eunit:
 	$(REBAR) eunit --cover
 
 dialyzer:
-	$(REBAR) dialyzer --update-plt=false 
-
-typer: $(DEPSOLVER_PLT) deps
-	typer $(TYPER_ARGS) -r ./src -I ./include
+	$(REBAR) dialyzer
 
 ##CLEANING
 clean:

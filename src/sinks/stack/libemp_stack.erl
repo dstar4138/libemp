@@ -44,13 +44,13 @@
 %% A Sink Stack is a set of sinks (ModuleName, Args, State, FaultHandlerFun).
 -record(libemp_stack_item,
             {module, sink, handler=?DEFAULT_FAULT_HANDLER}).
--opaque libemp_stack_item() :: #libemp_stack_item{}.
+-type libemp_stack_item() :: #libemp_stack_item{}.
 
 -record(libemp_sink_stack, {
                 stack=[]                       :: [ libemp_stack_item() ],
                 handler=?DEFAULT_FAULT_HANDLER :: fault_handler()
 }).
--opaque libemp_sink_stack() :: #libemp_sink_stack{}.
+-type libemp_sink_stack() :: #libemp_sink_stack{}.
 
 -export_type([fault_handler/0, fault_handler_return/0]).
 -export_type([libemp_sink_stack/0, libemp_stack_item/0]).
@@ -170,14 +170,15 @@ from_list( StackList, #libemp_sink_stack{}=S) -> S#libemp_sink_stack{stack=Stack
 %% @end
 -spec format( libemp_sink_stack() ) -> io_lib:chars().
 format( #libemp_sink_stack{stack = Stack} ) ->
-    lists:flatten(
-      lists:foldl(fun pprint/2, {[],1}, Stack)).
+  {Chars,_} = lists:foldl(fun pprint/2, {[],1}, Stack),
+  lists:flatten( Chars ).
 
 %% @hidden
 %% @doc Attempt to pretty print, by recursing on stacks.
 pprint(#libemp_stack_item{module = libemp_stack_sink, sink=Sink}, {Buffer,Indent}) ->
+  Stack = libemp_stack_sink:get_stack(Sink),
 {
-  [Buffer, lists:fold(fun pprint/2,{[],Indent+1}, libemp_stack_sink:get_stack(Sink)),"~n"],
+  [Buffer, lists:foldl(fun pprint/2,{[],Indent+1}, to_list(Stack)),"~n"],
  Indent
 };
 pprint(#libemp_stack_item{ module = Sink },{Buffer,Indent}) ->

@@ -20,6 +20,11 @@
   foldl_processors/3
 ]).
 
+%% Hacky Type definition to get Dialyzer to recognize the recursive type def.
+-type stack_config_opt()  :: {module(),[term()]} | {module(),[term()],fun()}.
+-type sub_stack_configs() :: [stack_configs()].
+-type stack_configs()     :: [stack_config_opt() | sub_stack_configs()].
+
 %% When the parse is complete we will have an Application definition.
 -opaque app_def() :: #{
   monitors => #{ term() => { term(), module(), term() } },
@@ -60,31 +65,19 @@ add_buffer( Name, Module, Configs, #{buffers := Buffs} = App ) ->
   App#{buffers => NewBuffs}.
 
 %% @doc Add a stack to the Application based on module definitions.
--spec add_stack(default|term(),default|fun(),StackConfigs,app_def()) -> app_def()
-          when StackConfigs :: [StackConfig],
-               StackConfig  :: {module(),[term()]} |
-                               {module(),[term()],fun()} |
-                               StackConfigs.
+-spec add_stack(default|term(),default|fun(),stack_configs(),app_def()) -> app_def().
 add_stack( BufferName, DefaultHandler, StackConfigs, #{procs:=Procs}=App ) ->
   {SinkModule,SinkConfigs} = parse_stack( DefaultHandler, StackConfigs ),
   NewProcs = [ {BufferName, SinkModule, SinkConfigs, DefaultHandler} | Procs ],
   App#{procs => NewProcs}.
 
 %% @doc Same as the `add_stack/4' but uses the default Buffer.
--spec add_stack(default|term(), StackConfigs, app_def()) -> app_def()
-          when StackConfigs :: [StackConfig],
-               StackConfig  :: {module(),[term()]} |
-                               {module(),[term()],fun()} |
-                               StackConfigs.
+-spec add_stack(default|fun(), stack_configs(), app_def()) -> app_def().
 add_stack( FaultHandler, StackConfigs, App ) ->
   add_stack( default, FaultHandler, StackConfigs, App ).
 
 %% @doc Same as the `add_stack/4' but uses the default Buffer and Fault Handler.
--spec add_stack( StackConfigs, app_def() ) -> app_def()
-          when StackConfigs :: [StackConfig],
-               StackConfig  :: {module(),[term()]} |
-                               {module(),[term()],fun()} |
-                               StackConfigs.
+-spec add_stack( stack_configs(), app_def() ) -> app_def().
 add_stack( StackConfigs, App ) ->
   add_stack( default, default, StackConfigs, App ).
 

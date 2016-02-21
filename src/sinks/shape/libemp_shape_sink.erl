@@ -52,12 +52,12 @@
 -type state() :: #shape{}.
 
 %% @doc Set up the default state based on the selected mode.
--spec setup( [ {atom(), term()} ] ) -> {ok, state()} | {stop, atom()}.
+-spec setup( [ {atom(), term()} ] ) -> {ok, state()}.
 setup( Args ) -> build_shape_state( Args ).
 
 %% @doc Process an event based on the mode the sink is in.
 -spec process( libemp_event(), term(), state() ) -> 
-    {next, state()} | {next, libemp_event(), state()} | {drop, state()}.
+    {next, state()} | drop | {drop, state()}.
 process( Event, _, State ) -> shape(Event, State).
 
 %%% ==========================================================================

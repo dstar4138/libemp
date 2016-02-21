@@ -58,7 +58,7 @@ start() -> application:start( ?APP ).
 %% @end
 -spec start( atom(), libemp_wire:app_def() ) -> ok | {error, term()}.
 start( AppName, AppDef ) ->
-    application:ensure_started( ?APP ),
+    _ = application:ensure_started( ?APP ),
     case validate_app( AppName, AppDef ) of
         {ok, CleanAppDef} -> libemp_node:inject( AppName, CleanAppDef );
         Error -> Error

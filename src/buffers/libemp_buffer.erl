@@ -81,8 +81,8 @@
                                       {error, Reason :: term()}.
 
 %% Breakdown the buffer process tree safely. This is synonymous with `gen_*'
-%% terminate callback. 
--callback destroy( Ref ::term() ) -> ok.
+%% terminate callback. The result of which is ignored.
+-callback destroy( Ref ::term() ) -> any().
 
 %% OPTIONAL:
 -optional_callbacks([ validate_configs/1 ]).
@@ -170,7 +170,7 @@ start( Module ) -> start( Module, Module, [] ).
 %% @doc Initialize the buffer with alternative arguments;
 %%   returns a factory initializer for this buffer type.
 %% @end
--spec start( Name :: atom(), Module ::atom() ) ->
+-spec start( Module :: atom(), Args ::[any()] ) ->
                             {ok, pid(), libemp_buffer_init()} |
                             {ok, false, libemp_buffer_init()} |
                             {error, term()}.
@@ -282,8 +282,9 @@ drop( _, 0 ) -> ok;
 drop( Buffer, Itters ) ->
     case libemp_buffer:size( Buffer ) of
         0 -> ok;
-        _ -> libemp_buffer:take( Buffer ), 
-             libemp_buffer:drop( Buffer, Itters - 1 )
+        _ ->
+          _ = libemp_buffer:take( Buffer ),
+          libemp_buffer:drop( Buffer, Itters - 1 )
     end.
 
 %%% =========================================================================
@@ -308,9 +309,9 @@ get_callback( FunName, Arity, Callbacks ) ->
 %% @hidden
 %% @doc Destroy the buffer reference safely and log the result of doing so.
 do_destroy( Mod, Ref ) ->
-    Return = (catch libemp_util:wrap_extern(Mod, destroy, [Ref])),
+    Return = (catch libemp_util:wrap_extern( Mod, destroy, [Ref], ok )),
     ?LOG("Buffer(~p) Destroy: ~p~n",[Mod,Return]),
-    Return.
+    libemp_util:exit_to_error( Return ).
 
 %% @hidden
 %% @doc Save the buffer according to the LibEMP System configuration. This
@@ -331,7 +332,7 @@ remove_buffer( #libemp_buffer_initializer{id=ID} ) ->
 %%    call the buffer's destroy functionality.
 %% @end
 wrap( false, Initializer ) ->
-  save_buffer( Initializer ),
+  _ = save_buffer( Initializer ),
   ignore;
 wrap( Pid, Initializer ) ->
   Callbacks = #{
@@ -341,7 +342,7 @@ wrap( Pid, Initializer ) ->
   case libemp_trapper:start_link( true, Pid, Callbacks ) of
     % Override and return the wrapper's Pid instead so all signals go to it.
     {ok, MonPid} ->
-      save_buffer( Initializer ),
+      _ = save_buffer( Initializer ),
       {ok, MonPid};
     Error ->
       destroy( Initializer ),

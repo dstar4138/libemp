@@ -27,7 +27,7 @@ new( Fun, Args ) when is_list(Args) andalso is_function(Fun,length(Args)) ->
    spawn( wrap_to_hang_for_join( Fun, Args ) ).
 
 join( Future ) ->
-   notify_for_join( Future ),
+   _ = notify_for_join( Future ),
    hang_for_join().
 -endif.
 

@@ -27,8 +27,6 @@
 -export([get_stack/1]).
 
 -include("sink_stack.hrl").
--type libemp_sink_stack() :: libemp_sink_stack:libemp_sink_stack().
--type fault_handler() :: libemp_sink_stack:fault_handler().
 
 %%%===================================================================
 %%% LibEMP Sink Behaviour
@@ -37,12 +35,12 @@
 %% @doc Set up the stack and all sub-sinks.
 setup( Args ) ->
   {StackConfig, HandlerFun} = parse_configs( Args ),
-  NewState = #stack_state{handler = HandlerFun},
+  NewState = #sink_state{handler = HandlerFun},
   NewStack = libemp_stack:new( HandlerFun ),
   build_stack( StackConfig, NewStack, NewState ).
 
 %% @doc Loops through all Sinks in the stack and destroys them safely.
-destroy( Reason, #stack_state{stack = Stack} ) ->
+destroy( Reason, #sink_state{stack = Stack} ) ->
   libemp_stack:destroy( Reason, Stack ).
 
 %% @doc Check that the configuration for the whole stack is valid.
@@ -54,9 +52,9 @@ validate_configs( Args ) ->
   end.
 
 %% @doc Process an incoming event by running it through the internal sinks.
-process( Event, BufferRef, #stack_state{stack=Stack}=S ) ->
+process( Event, BufferRef, #sink_state{stack=Stack}=S ) ->
   NewStack = libemp_stack_exec:run( Event, BufferRef, Stack ),
-  {next, S#stack_state{stack = NewStack}}.
+  {next, S#sink_state{stack = NewStack}}.
 
 %%%===================================================================
 %%% LibEMP Private functionality
@@ -64,8 +62,8 @@ process( Event, BufferRef, #stack_state{stack=Stack}=S ) ->
 
 %% @private
 %% @doc Pull out stack from Sink for recursion purposes.
--spec get_stack( State :: #stack_state{} ) -> libemp_sink_stack().
-get_stack( #stack_state{stack=Stack} ) -> Stack.
+-spec get_stack( State :: #sink_state{} ) -> libemp_stack:libemp_sink_stack().
+get_stack( #sink_state{stack=Stack} ) -> Stack.
 
 %%%===================================================================
 %%% Internal functions
@@ -74,7 +72,7 @@ get_stack( #stack_state{stack=Stack} ) -> Stack.
 %% @hidden
 %% @doc Build a stack object from the StackConfigs.
 build_stack( [], Stack, State) ->
-  {ok, State#stack_state{stack = Stack}};
+  {ok, State#sink_state{stack = Stack}};
 build_stack( [Item|Rest], Stack, State ) ->
   case startup(Item, Stack) of
     {ok, NewStack} ->
@@ -107,7 +105,7 @@ startup( {SinkModName, Args, FaultHandler}, Stack ) ->
 %%   either are missing defaults are provided.
 %% @end
 parse_configs( Args ) ->
-  parse_configs( Args, {?DEFAULT_STACK, ?DEFAULT_FAULT_HANDLER} ).
+  parse_configs( Args, {[], ?DEFAULT_FAULT_HANDLER} ).
 parse_configs( [], Configs ) ->
   Configs;
 parse_configs( [{stack, StackConfig}|Rest], {_, HF}) ->

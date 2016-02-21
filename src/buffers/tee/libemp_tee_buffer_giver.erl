@@ -39,7 +39,7 @@ handle_call( _Ignore, _From, State ) ->
 
 %% @doc Handle (broad/multi/single)-casts.
 handle_cast( {give, Event}, #giver{takers=Takers}=State ) ->
-  broadcast( Event, Takers ),
+  _ = broadcast( Event, Takers ),
   {noreply, State};
 handle_cast( {unregister, GiverPid}, State ) ->
   {noreply, rm_taker(GiverPid, State)};

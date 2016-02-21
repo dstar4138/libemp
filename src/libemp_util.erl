@@ -2,8 +2,6 @@
 %%% 
 -module(libemp_util).
 
--define(APPLICATION,libemp).
-
 -export([wrap_extern/2,wrap_extern/3,wrap_extern/4]).
 -export([escaping_foldl/3, do/1]).
 -export([function_exists/1, function_exists/2]).
@@ -11,7 +9,8 @@
 
 %% @doc Performs a left-fold respecting a fail-early approach requiring that
 %%   the function indicate when an error occurs via an EXIT signal or error 
-%%   tuple.
+%%   tuple. Note this is not transactional, it will cannot intelligently roll
+%%   back.
 %% @end
 -spec escaping_foldl( Fun, Acc, [ term() ] ) -> Res 
                       when Acc :: term(),
@@ -29,15 +28,21 @@ escaping_foldl( Fun, Acc, [H|T] ) ->
     end.
 
 %% @doc Provided a list of functions and arguments, do them in order until
-%%   we receive a common error code. Returns the last function's value.
+%%   we receive a common error code. Otherwise, returns the last function's
+%%   return value.
 %% @end
--spec do( [ {fun(), list()} ] ) -> term().
-do( Funs ) ->
+-spec do( [ FunctionDesc ] ) -> term()
+        when FunctionDesc :: fun() |
+                             {fun(), [term()]} |
+                             {module(), atom(), [term()]}.
+do( Functions ) ->
   escaping_foldl(
-    fun( {Fun, Args}, _ ) ->
-      erlang:apply( Fun, Args )
+    fun
+      ( {Fun, Args}, _ ) -> erlang:apply( Fun, Args );
+      ( {Module, Fun, Args}, _ ) -> erlang:apply( Module, Fun, Args);
+      ( Fun, _ ) when is_function( Fun ) -> erlang:apply( Fun, [] )
     end,
-    ok, Funs ).
+    ok, Functions ).
 
 %% @doc Wrap calls into behaviour implementations. This is were we can
 %%   optionally turn on logging, verbosity, etc.
@@ -58,11 +63,11 @@ function_exists( Fun ) -> function_exists( Fun, false ).
 %% @end
 function_exists( Fun, LoadIfNot ) ->
   case erlang:fun_info( Fun, type ) of
-    {type,local}    -> true;
+    {type,local}    -> true; % A literal function, so it definitely exists.
     {type,internal} -> true; % Should be defined, the name is a reference.
-    {type,external} ->
+    {type,external} ->       % Defined elsewhere, call into module to check.
       {M,F,A} = erlang:fun_info_mfa( Fun ),
-      load_module_maybe(LoadIfNot, M),
+      _ = load_module_maybe(LoadIfNot, M),
       erlang:function_exported(M,F,A)
   end.
 
@@ -71,7 +76,11 @@ function_exists( Fun, LoadIfNot ) ->
 load_module_maybe( false, _ ) -> ok;
 load_module_maybe( true, Module ) -> code:ensure_loaded( Module ).
 
-%% @doc Convert Exit codes to {error,Reason} objects for "safe" returns.
-exit_to_error( {'EXIT',_From, Reason} ) -> {error, Reason};
-exit_to_error( {'EXIT',Reason} ) -> {error, Reason};
+%% @doc Convert Exit codes to {error,Reason} objects for functions requiring
+%%    "safe" returns. Note, while this goes-against fail-fast, there are
+%%    instances where this is advantageous in a library with optional
+%%    functionality. Yet, please use sparingly.
+%% @end
+exit_to_error( {'EXIT', _From, Reason} ) -> {error, Reason};
+exit_to_error( {'EXIT', Reason} ) -> {error, Reason};
 exit_to_error( Reason ) -> Reason.

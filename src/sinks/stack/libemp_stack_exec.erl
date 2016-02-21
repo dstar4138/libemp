@@ -7,8 +7,6 @@
 -export([run/3]).
 
 -include("sink_stack.hrl").
--type libemp_sink_stack() :: libemp_sink_stack:libemp_sink_stack().
--type fault_handler() :: libemp_sink_stack:fault_handler().
 
 %% @doc Abstract over the stack fold to run the event over the Sink Stack.
 run( Event, Buffer, Stack ) ->
@@ -76,7 +74,7 @@ run_stack_item( Event, BufferRef, SItem ) ->
   run_stack_item( Event, BufferRef, SItem, RetryCount ).
 run_stack_item( Event, BufferRef, SItem, RetryCount ) ->
   Sink = libemp_stack:item_get_sink( SItem ),
-  case libemp_sink:process( Event, BufferRef, Sink ) of
+  case catch libemp_sink:process( Event, BufferRef, Sink ) of
   % Handle Potential process/3 return values.
     {next, NE, NS} -> {next, NE, libemp_stack:item_set_sink(NS, SItem)};
     {drop, NS}     -> {drop, libemp_stack:item_set_sink(NS,SItem)};

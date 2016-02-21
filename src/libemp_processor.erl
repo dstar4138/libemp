@@ -43,7 +43,7 @@
 %%%===================================================================
 
 %% @doc Starts the processor server and links it to the buffer.
--spec start_link( atom(), atom(), [term()]) ->
+-spec start_link( atom() | libemp_buffer:libemp_buffer_init(), atom(), [term()]) ->
   {ok, Pid :: pid()} | {error, Reason :: term()}.
 start_link( BufferName, SinkModule, SinkConfigs ) ->
   gen_server:start_link( ?MODULE, [
@@ -78,9 +78,6 @@ stop( Reason, ProcessorRef ) ->
 
 %% @private
 %% @doc Initializes the server state.
--spec(init(Args :: term()) ->
-  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term()} | ignore).
 init(Args) ->
   process_flag( trap_exit, true ),
   {ok, State} = init_state( Args ),
@@ -93,10 +90,6 @@ handle_call(_Request, _From, State) -> {reply, ok, State}.
 
 %% @private
 %% @doc Handling cast messages
--spec handle_cast(Request :: term(), State :: #state{}) ->
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast({events, Events}, State) ->
   % Halt the Processor while it does its thing.
   NewState = process( Events, State ),
@@ -105,21 +98,15 @@ handle_cast({events, Events}, State) ->
 
 %% @private
 %% @doc Handling all non call/cast messages
--spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: #state{}}.
 %TODO: handle taker failures.
 handle_info(_Info, State) -> {noreply, State}.
 
--spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
-    State :: #state{}) -> term().
+%% @private
+%% @doc Safely handle the processor shutdown.
 terminate( Reason, State ) -> do_terminate( Reason, State ).
 
 %% @private
 %% @doc Convert process state when code is changed
--spec(code_change(OldVsn :: term() | {down, term()}, State :: #state{},
-    Extra :: term()) -> {ok, NewState :: #state{}} | {error, Reason :: term()}).
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 %%%===================================================================
@@ -131,7 +118,7 @@ init_state([ BufferName, SinkModule, SinkConfigs ]) ->
   {ok, BufferGiveRef} = libemp_buffer:register( give, BufferName ),
   case libemp_sink:setup( SinkModule, SinkConfigs ) of
     {ok, SinkRef} ->
-      libemp_node:save_default_proc( BufferTakeRef, self() ),
+      _ = libemp_node:save_default_proc( BufferTakeRef, self() ),
       {ok, #state{
         take_buf = BufferTakeRef,
         give_buf = BufferGiveRef,
@@ -162,7 +149,7 @@ brute_kill_taker( Taker ) ->
 
 do_terminate( Reason, #state{taker_pid = Taker} = State ) ->
   brute_kill_taker( Taker ),
-  libemp_node:remove_default_proc( State#state.take_buf, self() ),
+  _ = libemp_node:remove_default_proc( State#state.take_buf, self() ),
   libemp_buffer:unregister( State#state.take_buf ),
   libemp_buffer:unregister( State#state.give_buf ),
   libemp_sink:destroy( Reason, State#state.sink_ref ),

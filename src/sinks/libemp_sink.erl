@@ -34,7 +34,7 @@
                               {shutdown, term()} | % System failure
                               term()),             % Unknown error
                     State :: term() ) -> 
-    term(). % Return ignored.
+    any(). % Return ignored.
 
 %%% Validate the configurations before startup.
 -callback validate_configs( [ Args::term() ] ) ->
@@ -94,7 +94,7 @@ destroy( Reason, #libemp_sink{module=Module,state=State} ) ->
 %% @doc Run a single event process and return the new Sink closure and the
 %%   event after the Sink was able to modify if need be.
 %% @end
--spec process( libemp_event(), libemp_buffer:libemp_buffer(), libemp_sink() ) ->
+-spec process( libemp_event(), libemp_buffer:libemp_buffer() | false, libemp_sink() ) ->
     {next, libemp_event(), libemp_sink()} | {drop, libemp_sink()}.
 process( Event, Buffer, #libemp_sink{module=Module, state=State}=Sink ) ->
     case do_process( Event, Buffer, Module, State ) of
@@ -168,6 +168,6 @@ do_process( Event, Buffer, Module, State ) ->
             {'EXIT', Reason} -> exit(Reason);
             Val -> Val
         end,
-    ?LOG("Sink(~p) Process(~p) => ~p~n",[Module, Event, Result]),
+%    ?LOG("Sink(~p) Process(~p) => ~p~n",[Module, Event, Result]),
     Result.
 

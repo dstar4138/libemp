@@ -42,12 +42,12 @@
 -type state() :: #context{}.
 
 %% @doc Set up the default state based on the selected mode.
--spec setup( [ {atom(), term()} ] ) -> {ok, state()} | {stop, atom()}.
+-spec setup( [ {atom(), term()} ] ) -> {ok, state()}.
 setup( Args ) -> build_context_state( Args ).
 
 %% @doc Process an event based on the mode the sink is in.
--spec process( libemp_event(), term(), state() ) -> 
-    {next, state()} | {next, libemp_event(), state()} | {drop, state()}.
+-spec process( libemp_event(), term(), state() ) ->
+       {next, libemp_event(), state()}.
 process( Event, _, State ) -> context(Event, State).
 
 %%% ==========================================================================

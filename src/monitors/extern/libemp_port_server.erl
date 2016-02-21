@@ -71,7 +71,7 @@ handle_info(_Info, State) -> {noreply, State}.
 %% @private
 %% @doc Handle Server termination by validating Port closure.
 terminate(Reason, #state{port=Port}=State) ->
-  notify({shutdown,Reason},State),
+  _ = notify({shutdown,Reason},State),
   catch erlang:port_close( Port ).
 
 %% @private
