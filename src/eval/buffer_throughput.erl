@@ -2,7 +2,6 @@
 -module(buffer_throughput).
 -export([
     run_all/0,
-    run/1,run/2,
     run_tests/1,run_tests/2,
     reductions/1]).
 -export([take/4,give/4]).
@@ -17,8 +16,6 @@ run_all() ->
 %  run_tests( libemp_epocxy_buffer, [{buffer_type, fifo}]),
 %  run_tests( libemp_epocxy_buffer, [{buffer_type, lifo}]),
   reductions( 1000 ).
-
-run( QueueName ) -> run( QueueName, [] ).
 
 %% @doc Run a set of tests over the buffer, namely agressively adding/removing
 %%   events with various numbers of producers/consumers.
@@ -52,12 +49,7 @@ run_tests( QueueName, BufferArgs ) ->
     libemp_buffer:destroy( Buffer3 ),
     io:format("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-~n~n").
 
-%% @doc Run the tests and then halt the VM.
-run( QueueName, BufferArgs ) ->
-    run_tests( QueueName, BufferArgs),
-    halt( 0 ).
-
-%% @doc Pass in the number of times to run, and get the number of reductions 
+%% @doc Pass in the number of times to run, and get the number of reductions
 %%   it takes to push an item onto a buffer. My runs suggest roughly 3.
 %% @end
 reductions(Count) ->
@@ -79,7 +71,7 @@ reductions(Count) ->
     TVals = lists:foldl( fun( _, App ) -> 
                          Self = self(),
                          CurCount = element(2,process_info(Self,reductions)),
-                         libemp_buffer:take(Buffer),
+                         _ = libemp_buffer:take(Buffer),
                          NxtCount = element(2,process_info(Self,reductions)),
                          [NxtCount-CurCount|App]
             end, [], lists:seq(1,Count) ),
