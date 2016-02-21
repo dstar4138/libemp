@@ -17,8 +17,9 @@ generators, routers, and processors.
 
 Just run `make prodshell` (or `make shell` for general debuggery). 
 
-There are a number of Modules in `src/eval/*` which can be used
-to test various functionality of LibEMP as a library. 
+There are a number of examples usages in 
+[src/eval/*](https://github.com/dstar4138/libemp/tree/develop/src/eval)
+which can be used to test various functionality of LibEMP as a library. 
 There are also a number of pre-built applications using LibEMP in the
 [libemp_examples](https://github.com/dstar4138/libemp_examples/)
 package which you can import.
